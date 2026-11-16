@@ -1,0 +1,361 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Demeter · wireframes C1</title>
+<!--
+  Wireframes de baja fidelidad de Demeter (issue #28, C1).
+  Cada <section class="sheet"> es una pantalla: escritorio (1200×750) y móvil (360×750).
+  Los PNG de docs/wireframes/ se generan haciendo captura de cada .sheet (ver README).
+  Gris = hueco de contenido; los textos son reales; los círculos numerados se explican al pie.
+-->
+<style>
+  * { box-sizing: border-box; margin: 0; }
+  body { background: #f3f3f1; font: 14px/1.35 system-ui, -apple-system, "Segoe UI", sans-serif; color: #1d1f20; padding: 40px; }
+  .sheet { width: fit-content; min-width: 1680px; background: #fff; border: 1px solid #d7d7d3; padding: 32px 36px 28px; margin-bottom: 40px; }
+  .sheet__head { display: flex; align-items: baseline; gap: 16px; margin-bottom: 22px; }
+  .sheet__n { font: 600 13px ui-monospace, monospace; color: #777; }
+  .sheet__t { font-size: 26px; font-weight: 700; letter-spacing: -.01em; }
+  .sheet__route { font: 13px ui-monospace, monospace; background: #eee; padding: 3px 8px; border-radius: 4px; }
+  .sheet__lock { font: 12px ui-monospace, monospace; color: #8a5a00; border: 1px solid #e3c88c; background: #fff7e5; padding: 2px 8px; border-radius: 99px; }
+  .frames { display: flex; gap: 40px; align-items: flex-start; }
+  .lbl { font: 11px ui-monospace, monospace; color: #888; margin-bottom: 6px; text-transform: uppercase; letter-spacing: .06em; }
+  .desk { width: 1200px; height: 750px; }
+  .mob { width: 360px; height: 750px; border-radius: 28px !important; }
+  .frame { border: 2px solid #1d1f20; border-radius: 10px; overflow: hidden; position: relative; background: #fff; }
+  .notes { width: 0; min-width: 100%; margin-top: 22px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px 32px; font-size: 13px; color: #333; }
+  .notes li { list-style: none; display: flex; gap: 8px; }
+  .notes b { flex: none; }
+
+  /* piezas */
+  .box { background: #e7e7e4; border-radius: 6px; }
+  .ph { background: repeating-linear-gradient(135deg, #e3e3e0 0 10px, #ecece9 10px 20px); border-radius: 6px; display: grid; place-items: center; color: #777; font: 12px ui-monospace, monospace; text-align: center; }
+  .line { border: 1.5px solid #1d1f20; border-radius: 6px; }
+  .btn { display: inline-flex; align-items: center; justify-content: center; height: 36px; padding: 0 16px; border-radius: 8px; background: #1d1f20; color: #fff; font-weight: 600; font-size: 13px; }
+  .btn--ghost { background: #fff; color: #1d1f20; border: 1.5px solid #1d1f20; }
+  .pill { display: inline-flex; align-items: center; height: 28px; padding: 0 12px; border: 1.5px solid #1d1f20; border-radius: 99px; font-size: 12px; }
+  .chip { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px; border-radius: 99px; font: 11px ui-monospace, monospace; background: #e7e7e4; }
+  .chip--warn { background: #1d1f20; color: #fff; }
+  .mono { font-family: ui-monospace, monospace; }
+  .muted { color: #777; }
+  .n { position: absolute; width: 22px; height: 22px; border-radius: 50%; background: #ff6a2b; color: #fff; font: 700 12px/22px system-ui; text-align: center; z-index: 5; box-shadow: 0 0 0 3px #fff; }
+  .notes .n { position: static; flex: none; }
+  .field { display: grid; gap: 5px; font-size: 12px; font-weight: 600; }
+  .field span.inp { height: 40px; border: 1.5px solid #1d1f20; border-radius: 8px; display: flex; align-items: center; padding: 0 12px; font-weight: 400; color: #999; }
+  .row { display: flex; align-items: center; gap: 10px; }
+  .spark { height: 26px; background: linear-gradient(to top right, transparent 48%, #1d1f20 49% 51%, transparent 52%); opacity: .5; }
+  table { border-collapse: collapse; width: 100%; font-size: 12px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #ddd; }
+  th { font: 600 11px ui-monospace, monospace; color: #777; text-transform: uppercase; }
+
+  /* armazón de la app (escritorio) */
+  .app { display: grid; grid-template-columns: 210px 1fr; height: 100%; }
+  .side { border-right: 1.5px solid #1d1f20; padding: 18px 14px; display: flex; flex-direction: column; gap: 6px; }
+  .logo { font-weight: 800; font-stretch: 75%; letter-spacing: .02em; font-size: 18px; margin-bottom: 16px; display: flex; gap: 8px; align-items: center; }
+  .logo i { width: 16px; height: 16px; border: 4px solid #1d1f20; border-radius: 50%; }
+  .nav a { display: flex; justify-content: space-between; padding: 9px 10px; border-radius: 8px; color: inherit; text-decoration: none; font-size: 13px; }
+  .nav a.on { background: #1d1f20; color: #fff; }
+  .side__foot { margin-top: auto; border-top: 1px solid #ddd; padding-top: 12px; display: grid; gap: 8px; font-size: 12px; }
+  .main { padding: 18px 24px; display: flex; flex-direction: column; gap: 16px; overflow: hidden; }
+  .top { display: flex; align-items: center; gap: 12px; }
+  .top h1 { font-size: 22px; margin-right: auto; }
+  /* armazón móvil */
+  .mtop { height: 56px; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; border-bottom: 1.5px solid #1d1f20; }
+  .mbody { padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; height: calc(100% - 56px - 64px); overflow: hidden; }
+  .mtab { position: absolute; left: 0; right: 0; bottom: 0; height: 64px; border-top: 1.5px solid #1d1f20; display: grid; grid-template-columns: repeat(4, 1fr); font-size: 11px; text-align: center; align-items: center; background: #fff; }
+  .mtab span::before { content: ""; display: block; width: 18px; height: 18px; margin: 0 auto 3px; border-radius: 5px; background: #d5d5d1; }
+  .mtab .on { font-weight: 700; }
+  .mtab .on::before { background: #1d1f20; }
+</style>
+</head>
+<body>
+
+<!-- ============================================================ 1. INICIO -->
+<section class="sheet" id="s1">
+  <div class="sheet__head"><span class="sheet__n">01 / 06</span><span class="sheet__t">Inicio (landing)</span><span class="sheet__route">/</span><span class="chip">pública</span></div>
+  <div class="frames">
+    <div><p class="lbl">Escritorio · 1200 × 750</p>
+      <div class="frame desk">
+        <div class="ph" style="position:absolute;inset:0;border-radius:0">foto: Costa Tropical al amanecer (Carchuna, Motril)</div>
+        <div class="row" style="position:absolute;left:28px;right:28px;top:20px">
+          <span class="logo" style="margin:0;background:#fff;padding:2px 8px;border-radius:6px"><i></i>Demeter</span><span style="flex:1"></span>
+          <span class="pill" style="background:#fff">Panel</span><span class="pill" style="background:#fff">Cultivos</span><span class="pill" style="background:#fff">Gemelo</span><span class="pill" style="background:#fff">API</span><span class="pill" style="background:#fff">Código</span>
+          <span class="btn" style="margin-left:14px">Ver el panel en vivo</span>
+        </div>
+        <span class="n" style="left:1150px;top:8px">1</span>
+        <div style="position:absolute;left:90px;right:90px;top:130px;height:230px;border:2px dashed #1d1f20;display:grid;place-items:center;font:800 150px/1 system-ui;font-stretch:75%;letter-spacing:-.02em;color:#1d1f20;background:rgba(255,255,255,.55)">DEMETER</div>
+        <span class="n" style="left:78px;top:118px">2</span>
+        <div style="position:absolute;left:28px;bottom:70px;width:300px;background:#fff;padding:10px;border-radius:6px;font-size:20px;line-height:1.2">Sensores de parcela en tiempo real para la Costa Tropical.</div>
+        <div class="row mono" style="position:absolute;left:28px;right:28px;bottom:20px;font-size:12px;background:#fff;padding:6px 10px;border-radius:6px"><span>Carchuna, Motril · 36° 42′ N</span><span style="flex:1;text-align:center">Desliza ↓</span><span>● Bancal 3 · suelo 19 %</span></div>
+        <span class="n" style="left:1000px;top:668px">3</span>
+      </div>
+    </div>
+    <div><p class="lbl">Móvil · 360 × 750</p>
+      <div class="frame mob">
+        <div class="ph" style="position:absolute;inset:0;border-radius:0">foto</div>
+        <div class="row" style="position:absolute;left:14px;right:14px;top:16px"><span class="logo" style="margin:0;background:#fff;padding:2px 6px;border-radius:6px;font-size:15px"><i></i>Demeter</span><span style="flex:1"></span><span class="btn" style="height:32px;font-size:12px">Ver el panel</span></div>
+        <div style="position:absolute;left:12px;right:12px;top:250px;height:96px;border:2px dashed #1d1f20;display:grid;place-items:center;font:800 64px/1 system-ui;font-stretch:75%;color:#1d1f20;background:rgba(255,255,255,.55)">DEMETER</div>
+        <div style="position:absolute;left:16px;right:16px;bottom:56px;background:#fff;padding:8px;border-radius:6px;font-size:17px">Sensores de parcela en tiempo real para la Costa Tropical.</div>
+        <div class="row mono" style="position:absolute;left:16px;right:16px;bottom:18px;font-size:11px;background:#fff;padding:4px 8px;border-radius:6px"><span>Desliza ↓</span><span style="flex:1"></span><span>● suelo 19 %</span></div>
+      </div>
+    </div>
+    <div style="width:300px"><p class="lbl">Al bajar (resto de la página)</p>
+      <div style="display:grid;gap:8px">
+        <div class="ph" style="height:120px">acto 2: niebla + bancal en líneas 3D</div>
+        <div class="ph" style="height:150px;position:relative">cabina «mundos»: Medir · Avisar · Regar · Explorar<span class="n" style="right:6px;top:6px">4</span></div>
+        <div class="ph" style="height:90px">funciones / gemelo 3D</div>
+        <div class="ph" style="height:70px">API y código abierto (GPL v3)</div>
+        <div class="ph" style="height:60px">preguntas + pie</div>
+      </div>
+    </div>
+  </div>
+  <ul class="notes">
+    <li><span class="n">1</span><span><b>Ver el panel en vivo</b> → <span class="mono">/login</span>; si ya hay sesión, directo a <span class="mono">/dashboard</span>.</span></li>
+    <li><span class="n">2</span><span>Nombre en condensada mayúsculas: sólido arriba, se funde con Sierra Nevada abajo.</span></li>
+    <li><span class="n">3</span><span>Lectura en directo de demo (dato real del Bancal 3 cuando esté la API).</span></li>
+    <li><span class="n">4</span><span>Bajada suave automática hasta la cabina; cada ventana enlaza a su pantalla de la app.</span></li>
+    <li><span class="n">!</span><span>Cambia el contrato de C2: <span class="mono">/</span> deja de redirigir y es la landing pública.</span></li>
+  </ul>
+</section>
+
+<!-- ============================================================ 2. LOGIN -->
+<section class="sheet" id="s2">
+  <div class="sheet__head"><span class="sheet__n">02 / 06</span><span class="sheet__t">Iniciar sesión</span><span class="sheet__route">/login</span><span class="chip">pública</span></div>
+  <div class="frames">
+    <div><p class="lbl">Escritorio · 1200 × 750</p>
+      <div class="frame desk" style="display:grid;grid-template-columns:1fr 480px">
+        <div class="ph" style="border-radius:0;position:relative">foto de la costa (la misma de la portada)
+          <div style="position:absolute;left:40px;right:40px;bottom:48px;font:800 92px/1 system-ui;font-stretch:75%;border:2px dashed #1d1f20;text-align:center;padding:10px;background:rgba(255,255,255,.55);color:#1d1f20">DEMETER</div>
+        </div>
+        <div style="padding:56px 56px;display:flex;flex-direction:column;gap:18px;position:relative">
+          <a class="muted" style="font-size:12px">← Volver al inicio</a>
+          <h2 style="font-size:30px;margin-top:40px">Entra a tu panel</h2>
+          <p class="muted">Sensores de tus parcelas, histórico y alertas.</p>
+          <label class="field">Usuario<span class="inp">p. ej. tecnico</span></label>
+          <label class="field">Contraseña<span class="inp">••••••••<span style="margin-left:auto" class="mono">ver</span></span></label>
+          <div class="line" style="padding:10px 12px;font-size:12px;border-color:#b3261e;color:#b3261e;position:relative">Usuario o contraseña incorrectos.<span class="n" style="right:-30px;top:6px">2</span></div>
+          <span class="btn" style="height:44px;position:relative">Entrar<span class="n" style="right:-30px;top:11px">1</span></span>
+          <p class="mono muted" style="font-size:11px;margin-top:auto;position:relative">Demo: tecnico / demeter2026<span class="n" style="left:-30px;top:-4px">3</span></p>
+        </div>
+      </div>
+    </div>
+    <div><p class="lbl">Móvil · 360 × 750</p>
+      <div class="frame mob">
+        <div class="ph" style="height:210px;border-radius:0;position:relative">foto<div style="position:absolute;left:14px;right:14px;bottom:14px;font:800 52px/1 system-ui;font-stretch:75%;border:2px dashed #1d1f20;text-align:center;background:rgba(255,255,255,.55);color:#1d1f20">DEMETER</div></div>
+        <div style="padding:22px 20px;display:flex;flex-direction:column;gap:14px">
+          <h2 style="font-size:24px">Entra a tu panel</h2>
+          <label class="field">Usuario<span class="inp">p. ej. tecnico</span></label>
+          <label class="field">Contraseña<span class="inp">••••••••</span></label>
+          <span class="btn" style="height:46px">Entrar</span>
+          <a class="muted" style="font-size:12px;text-align:center">← Volver al inicio</a>
+          <p class="mono muted" style="font-size:11px;text-align:center;margin-top:30px">Demo: tecnico / demeter2026</p>
+        </div>
+      </div>
+    </div>
+  </div>
+  <ul class="notes">
+    <li><span class="n">1</span><span><b>Entrar</b> → <span class="mono">AuthState.login</span> → <span class="mono">POST /api/auth/login</span>; guarda el token en LocalStorage y va a <span class="mono">/dashboard</span> (o a la página que pidió).</span></li>
+    <li><span class="n">2</span><span>Error en línea, sin recargar. Mientras espera: botón deshabilitado con «Entrando…».</span></li>
+    <li><span class="n">3</span><span>Usuario de demo para el jurado (lo crea el seed).</span></li>
+    <li><span class="n">!</span><span>Funcionalidad completa en C3 (#30). En C1 solo el boceto y el esqueleto de <span class="mono">AuthState</span>.</span></li>
+  </ul>
+</section>
+
+<!-- ============================================================ 3. DASHBOARD -->
+<section class="sheet" id="s3">
+  <div class="sheet__head"><span class="sheet__n">03 / 06</span><span class="sheet__t">Dashboard</span><span class="sheet__route">/dashboard</span><span class="sheet__lock">requiere sesión</span></div>
+  <div class="frames">
+    <div><p class="lbl">Escritorio · 1200 × 750</p>
+      <div class="frame desk"><div class="app">
+        <aside class="side"><span class="logo"><i></i>DEMETER</span>
+          <nav class="nav"><a class="on">Dashboard</a><a>Parcelas</a><a>Alertas <span class="chip chip--warn">2</span></a><a>Ajustes</a></nav>
+          <div class="side__foot"><span>tecnico · <span class="muted">técnico</span></span><span class="btn btn--ghost" style="height:30px">Cerrar sesión</span></div></aside>
+        <main class="main">
+          <div class="top"><h1>Finca La Costa</h1><span class="pill">Parcela ▾</span><span class="chip">● en directo · hace 3 s</span><span class="n" style="position:static">1</span></div>
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;position:relative">
+            <div class="line" style="padding:12px"><div class="row"><span class="muted" style="font-size:12px">Temperatura</span><span style="flex:1"></span><span class="chip">ok</span></div><div style="font-size:30px;font-weight:700">23,7 <small style="font-size:14px">ºC</small></div><div class="spark"></div><div class="mono muted" style="font-size:10px">t001 · 10–35 ºC</div></div>
+            <div class="line" style="padding:12px;border-width:3px"><div class="row"><span class="muted" style="font-size:12px">Humedad suelo</span><span style="flex:1"></span><span class="chip chip--warn">BAJO</span></div><div style="font-size:30px;font-weight:700">19 <small style="font-size:14px">%</small></div><div class="spark"></div><div class="mono muted" style="font-size:10px">h001 · 25–60 %</div></div>
+            <div class="line" style="padding:12px"><div class="row"><span class="muted" style="font-size:12px">Luminosidad</span><span style="flex:1"></span><span class="chip">ok</span></div><div style="font-size:30px;font-weight:700">42 <small style="font-size:14px">klx</small></div><div class="spark"></div><div class="mono muted" style="font-size:10px">l001 · 5–90 klx</div></div>
+            <div class="line" style="padding:12px"><div class="row"><span class="muted" style="font-size:12px">Humedad aire</span><span style="flex:1"></span><span class="chip">ok</span></div><div style="font-size:30px;font-weight:700">61 <small style="font-size:14px">%</small></div><div class="spark"></div><div class="mono muted" style="font-size:10px">a001 · 40–85 %</div></div>
+            <span class="n" style="left:-11px;top:-11px">2</span>
+          </div>
+          <div style="display:grid;grid-template-columns:1.4fr 1fr;gap:12px;flex:1;min-height:0">
+            <div class="ph" style="position:relative">gemelo 3D de la parcela: marcador por sensor (rojo y parpadea en alerta)<span class="n" style="left:8px;top:8px">3</span></div>
+            <div class="line" style="padding:14px;display:flex;flex-direction:column;gap:10px;position:relative"><div class="row"><b>Alertas recientes</b><span style="flex:1"></span><a class="muted" style="font-size:12px">Ver todas →</a></div>
+              <div class="row" style="font-size:12px"><span class="chip chip--warn">BAJO</span><span>Humedad suelo 19 % · h001</span><span style="flex:1"></span><span class="muted mono">11:02</span></div>
+              <div class="row" style="font-size:12px"><span class="chip chip--warn">ALTO</span><span>Temperatura 36 ºC · t001</span><span style="flex:1"></span><span class="muted mono">ayer</span></div>
+              <div class="box" style="padding:10px;font-size:12px;margin-top:auto">💧 Recomendación: regar Bancal 3 · 25 min antes de las 11:00</div>
+              <span class="n" style="right:8px;top:-11px">4</span></div>
+          </div>
+        </main></div></div>
+    </div>
+    <div><p class="lbl">Móvil · 360 × 750</p>
+      <div class="frame mob">
+        <div class="mtop"><span class="logo" style="margin:0;font-size:15px"><i></i>DEMETER</span><span class="chip">● hace 3 s</span></div>
+        <div class="mbody">
+          <span class="pill" style="align-self:flex-start">Finca La Costa ▾</span>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <div class="line" style="padding:10px"><span class="muted" style="font-size:11px">Temperatura</span><div style="font-size:22px;font-weight:700">23,7 ºC</div></div>
+            <div class="line" style="padding:10px;border-width:3px"><span class="muted" style="font-size:11px">Hum. suelo <span class="chip chip--warn">BAJO</span></span><div style="font-size:22px;font-weight:700">19 %</div></div>
+            <div class="line" style="padding:10px"><span class="muted" style="font-size:11px">Luz</span><div style="font-size:22px;font-weight:700">42 klx</div></div>
+            <div class="line" style="padding:10px"><span class="muted" style="font-size:11px">Hum. aire</span><div style="font-size:22px;font-weight:700">61 %</div></div>
+          </div>
+          <div class="ph" style="height:170px">gemelo 3D</div>
+          <b>Alertas recientes</b>
+          <div class="row" style="font-size:12px"><span class="chip chip--warn">BAJO</span><span>Hum. suelo 19 %</span><span style="flex:1"></span><span class="muted mono">11:02</span></div>
+        </div>
+        <div class="mtab"><span class="on">Inicio</span><span>Parcelas</span><span>Alertas</span><span>Ajustes</span></div>
+      </div>
+    </div>
+  </div>
+  <ul class="notes">
+    <li><span class="n">1</span><span>Selector de parcela + indicador «en directo» (refresco cada 3 s o WebSocket).</span></li>
+    <li><span class="n">2</span><span>Una tarjeta por sensor: último valor, estado frente a umbrales, mini histórico. Clic → pantalla 04.</span></li>
+    <li><span class="n">3</span><span>Gemelo 3D (innovación). En móvil va debajo de las tarjetas.</span></li>
+    <li><span class="n">4</span><span>Últimas alertas + recomendación de riego. Datos: <span class="mono">GET /api/dashboard</span> → <span class="mono">DashboardSummary</span>.</span></li>
+  </ul>
+</section>
+
+<!-- ============================================================ 4. PARCELA Y SENSOR -->
+<section class="sheet" id="s4">
+  <div class="sheet__head"><span class="sheet__n">04 / 06</span><span class="sheet__t">Parcela y sensor (histórico)</span><span class="sheet__route">/parcelas/[id]?sensor=h001</span><span class="sheet__lock">requiere sesión</span></div>
+  <div class="frames">
+    <div><p class="lbl">Escritorio · 1200 × 750</p>
+      <div class="frame desk"><div class="app">
+        <aside class="side"><span class="logo"><i></i>DEMETER</span>
+          <nav class="nav"><a>Dashboard</a><a class="on">Parcelas</a><a>Alertas <span class="chip chip--warn">2</span></a><a>Ajustes</a></nav>
+          <div class="side__foot"><span>tecnico · <span class="muted">técnico</span></span><span class="btn btn--ghost" style="height:30px">Cerrar sesión</span></div></aside>
+        <main class="main">
+          <div class="top"><h1>Finca La Costa <span class="muted" style="font-size:14px;font-weight:400">· Carchuna, Motril</span></h1><span class="btn btn--ghost">Exportar CSV</span><span class="n" style="position:static">4</span></div>
+          <div class="row" style="position:relative"><span class="pill">Temperatura</span><span class="pill" style="background:#1d1f20;color:#fff">Humedad suelo</span><span class="pill">Luminosidad</span><span class="pill">Humedad aire</span><span class="n" style="position:static">1</span></div>
+          <div class="row" style="position:relative"><label class="field" style="width:170px">Desde<span class="inp">09/11/2026</span></label><label class="field" style="width:170px">Hasta<span class="inp">16/11/2026</span></label><label class="field" style="width:110px">Límite<span class="inp">500</span></label><span class="btn" style="align-self:flex-end;height:40px">Aplicar</span><span class="pill" style="align-self:flex-end">24 h</span><span class="pill" style="align-self:flex-end">7 días</span><span class="pill" style="align-self:flex-end">30 días</span><span class="n" style="position:static;align-self:flex-end">2</span></div>
+          <div class="line" style="flex:1;min-height:0;position:relative;padding:14px">
+            <div class="row" style="font-size:12px;padding-left:22px"><b>Humedad del suelo · h001</b><span style="flex:1"></span><span class="muted">mín 17 % · media 31 % · máx 48 %</span></div>
+            <div style="position:absolute;left:14px;right:14px;top:90px;height:110px;background:#efefec;border-top:1px dashed #999;border-bottom:1px dashed #999"></div>
+            <span class="mono muted" style="position:absolute;right:20px;top:72px;font-size:10px">umbral alto 60 %</span><span class="mono muted" style="position:absolute;right:20px;top:204px;font-size:10px">umbral bajo 25 %</span>
+            <svg viewBox="0 0 1000 220" preserveAspectRatio="none" style="position:absolute;left:14px;right:14px;top:50px;width:calc(100% - 28px);height:220px"><polyline fill="none" stroke="#1d1f20" stroke-width="2.5" points="0,90 60,80 120,95 180,70 240,85 300,110 360,120 420,100 480,130 540,150 600,140 660,160 720,170 780,190 840,175 900,200 960,195 1000,205"/><circle cx="900" cy="200" r="6" fill="#ff6a2b"/></svg>
+            <span class="n" style="left:8px;top:8px">3</span>
+          </div>
+          <table class="line"><tr><th>Fecha</th><th>Valor</th><th>Estado</th></tr><tr><td class="mono">16/11 11:02</td><td>19 %</td><td><span class="chip chip--warn">BAJO</span></td></tr><tr><td class="mono">16/11 10:57</td><td>21 %</td><td><span class="chip chip--warn">BAJO</span></td></tr></table>
+        </main></div></div>
+    </div>
+    <div><p class="lbl">Móvil · 360 × 750</p>
+      <div class="frame mob">
+        <div class="mtop"><span>← Finca La Costa</span><span class="mono" style="font-size:12px">CSV</span></div>
+        <div class="mbody">
+          <div class="row" style="overflow:hidden"><span class="pill" style="flex:none">Temp.</span><span class="pill" style="flex:none;background:#1d1f20;color:#fff">Hum. suelo</span><span class="pill" style="flex:none">Luz</span><span class="pill" style="flex:none">Hum. aire</span></div>
+          <div class="row"><span class="pill">24 h</span><span class="pill" style="background:#1d1f20;color:#fff">7 días</span><span class="pill">30 días</span><span class="pill">Fechas…</span></div>
+          <div class="line" style="height:230px;position:relative;padding:10px"><b style="font-size:12px">Humedad del suelo</b><div style="position:absolute;left:10px;right:10px;top:70px;height:70px;background:#efefec;border-top:1px dashed #999;border-bottom:1px dashed #999"></div><svg viewBox="0 0 1000 220" preserveAspectRatio="none" style="position:absolute;left:10px;top:40px;width:calc(100% - 20px);height:170px"><polyline fill="none" stroke="#1d1f20" stroke-width="5" points="0,90 120,95 240,85 360,120 480,130 600,140 720,170 840,175 1000,205"/></svg></div>
+          <div class="mono muted" style="font-size:11px">mín 17 % · media 31 % · máx 48 %</div>
+          <table><tr><th>Fecha</th><th>Valor</th></tr><tr><td class="mono">16/11 11:02</td><td>19 % <span class="chip chip--warn">BAJO</span></td></tr><tr><td class="mono">16/11 10:57</td><td>21 %</td></tr></table>
+        </div>
+        <div class="mtab"><span>Inicio</span><span class="on">Parcelas</span><span>Alertas</span><span>Ajustes</span></div>
+      </div>
+    </div>
+  </div>
+  <ul class="notes">
+    <li><span class="n">1</span><span>Un sensor a la vez (pestañas). Datos: <span class="mono">GET /api/parcels/{id}/sensors</span>.</span></li>
+    <li><span class="n">2</span><span>Filtros del reto: <span class="mono">from</span>, <span class="mono">to</span>, <span class="mono">limit</span> + atajos 24 h / 7 / 30 días.</span></li>
+    <li><span class="n">3</span><span>Gráfica con la banda de umbrales; puntos fuera de banda resaltados. <span class="mono">GET /api/sensors/{id}/data</span> → <span class="mono">list[Reading]</span>.</span></li>
+    <li><span class="n">4</span><span>Exportar el histórico filtrado a CSV (idea diferenciadora).</span></li>
+    <li><span class="n">·</span><span>La lista de parcelas (<span class="mono">/parcelas</span>) es una rejilla de tarjetas que lleva aquí; si hay una sola parcela, se salta.</span></li>
+  </ul>
+</section>
+
+<!-- ============================================================ 5. ALERTAS -->
+<section class="sheet" id="s5">
+  <div class="sheet__head"><span class="sheet__n">05 / 06</span><span class="sheet__t">Alertas</span><span class="sheet__route">/alertas</span><span class="sheet__lock">requiere sesión</span></div>
+  <div class="frames">
+    <div><p class="lbl">Escritorio · 1200 × 750</p>
+      <div class="frame desk"><div class="app">
+        <aside class="side"><span class="logo"><i></i>DEMETER</span>
+          <nav class="nav"><a>Dashboard</a><a>Parcelas</a><a class="on">Alertas <span class="chip" style="background:#fff;color:#1d1f20">2</span></a><a>Ajustes</a></nav>
+          <div class="side__foot"><span>tecnico · <span class="muted">técnico</span></span><span class="btn btn--ghost" style="height:30px">Cerrar sesión</span></div></aside>
+        <main class="main">
+          <div class="top"><h1>Alertas</h1><span class="btn btn--ghost">Marcar todas como leídas</span></div>
+          <div class="row" style="position:relative"><span class="pill" style="background:#1d1f20;color:#fff">Sin leer · 2</span><span class="pill">Todas</span><span style="width:20px"></span><span class="pill">Tipo: todos ▾</span><span class="pill">Parcela: todas ▾</span><span class="pill">Sensor: todos ▾</span><span class="n" style="position:static">1</span></div>
+          <table class="line" style="position:relative">
+            <tr><th>Estado</th><th>Tipo</th><th>Sensor</th><th>Mensaje</th><th>Fecha</th><th></th></tr>
+            <tr style="font-weight:600"><td>● sin leer</td><td><span class="chip chip--warn">BAJO</span></td><td class="mono">h001 · Hum. suelo</td><td>19 % por debajo del umbral (25 %)</td><td class="mono">16/11 11:02</td><td><span class="btn btn--ghost" style="height:28px">Marcar leída</span></td></tr>
+            <tr style="font-weight:600"><td>● sin leer</td><td><span class="chip chip--warn">ALTO</span></td><td class="mono">t001 · Temperatura</td><td>36 ºC por encima del umbral (35 ºC)</td><td class="mono">15/11 15:40</td><td><span class="btn btn--ghost" style="height:28px">Marcar leída</span></td></tr>
+            <tr class="muted"><td>leída</td><td><span class="chip">BAJO</span></td><td class="mono">a001 · Hum. aire</td><td>38 % por debajo del umbral (40 %)</td><td class="mono">14/11 07:12</td><td></td></tr>
+            <tr class="muted"><td>leída</td><td><span class="chip">ALTO</span></td><td class="mono">l001 · Luminosidad</td><td>93 klx por encima del umbral (90 klx)</td><td class="mono">13/11 14:05</td><td></td></tr>
+          </table>
+          <span class="n" style="position:absolute;left:1150px;top:180px">2</span>
+          <div class="row muted" style="font-size:12px"><span>4 de 37</span><span style="flex:1"></span><span class="pill">← Anterior</span><span class="pill">Siguiente →</span></div>
+          <div class="box" style="padding:12px;font-size:12px;position:relative">Toast al llegar una alerta nueva en cualquier pantalla: «Humedad del suelo baja en Bancal 3 · Ver»<span class="n" style="right:8px;top:-11px">3</span></div>
+        </main></div></div>
+    </div>
+    <div><p class="lbl">Móvil · 360 × 750</p>
+      <div class="frame mob">
+        <div class="mtop"><b>Alertas</b><span class="mono" style="font-size:12px">Filtrar</span></div>
+        <div class="mbody">
+          <div class="row"><span class="pill" style="background:#1d1f20;color:#fff">Sin leer · 2</span><span class="pill">Todas</span></div>
+          <div class="line" style="padding:12px;display:grid;gap:6px"><div class="row"><span class="chip chip--warn">BAJO</span><b style="font-size:13px">Humedad suelo · h001</b></div><span style="font-size:12px">19 % por debajo del umbral (25 %)</span><div class="row"><span class="mono muted" style="font-size:11px">16/11 11:02</span><span style="flex:1"></span><span class="btn btn--ghost" style="height:28px">Marcar leída</span></div></div>
+          <div class="line" style="padding:12px;display:grid;gap:6px"><div class="row"><span class="chip chip--warn">ALTO</span><b style="font-size:13px">Temperatura · t001</b></div><span style="font-size:12px">36 ºC por encima del umbral (35 ºC)</span><div class="row"><span class="mono muted" style="font-size:11px">15/11 15:40</span><span style="flex:1"></span><span class="btn btn--ghost" style="height:28px">Marcar leída</span></div></div>
+          <div class="line muted" style="padding:12px;font-size:12px">BAJO · Humedad aire · 14/11 · leída</div>
+        </div>
+        <div class="mtab"><span>Inicio</span><span>Parcelas</span><span class="on">Alertas</span><span>Ajustes</span></div>
+      </div>
+    </div>
+  </div>
+  <ul class="notes">
+    <li><span class="n">1</span><span>Filtros: sin leer / todas, tipo (LOW/HIGH), parcela, sensor.</span></li>
+    <li><span class="n">2</span><span>Fila = <span class="mono">Alert</span>. «Marcar leída» pone <span class="mono">acknowledged = true</span> (endpoint a acordar con A*).</span></li>
+    <li><span class="n">3</span><span>Aviso emergente global con <span class="mono">rx.toast</span> cuando entra una alerta nueva.</span></li>
+  </ul>
+</section>
+
+<!-- ============================================================ 6. AJUSTES -->
+<section class="sheet" id="s6">
+  <div class="sheet__head"><span class="sheet__n">06 / 06</span><span class="sheet__t">Umbrales y ajustes</span><span class="sheet__route">/ajustes</span><span class="sheet__lock">requiere sesión</span></div>
+  <div class="frames">
+    <div><p class="lbl">Escritorio · 1200 × 750</p>
+      <div class="frame desk"><div class="app">
+        <aside class="side"><span class="logo"><i></i>DEMETER</span>
+          <nav class="nav"><a>Dashboard</a><a>Parcelas</a><a>Alertas <span class="chip chip--warn">2</span></a><a class="on">Ajustes</a></nav>
+          <div class="side__foot"><span>tecnico · <span class="muted">técnico</span></span><span class="btn btn--ghost" style="height:30px">Cerrar sesión</span></div></aside>
+        <main class="main">
+          <div class="top"><h1>Ajustes</h1></div>
+          <div class="line" style="padding:16px;position:relative">
+            <div class="row" style="margin-bottom:10px"><b>Umbrales de los sensores</b><span class="muted" style="font-size:12px">· Finca La Costa</span><span style="flex:1"></span><span class="btn">Guardar cambios</span></div>
+            <table>
+              <tr><th>Sensor</th><th>Tipo</th><th>Unidad</th><th>Umbral bajo</th><th>Umbral alto</th><th>Último valor</th></tr>
+              <tr><td class="mono">t001</td><td>Temperatura</td><td>ºC</td><td><span class="line" style="display:inline-block;width:90px;padding:6px 8px">10</span></td><td><span class="line" style="display:inline-block;width:90px;padding:6px 8px">35</span></td><td>23,7</td></tr>
+              <tr><td class="mono">h001</td><td>Humedad suelo</td><td>%</td><td><span class="line" style="display:inline-block;width:90px;padding:6px 8px">25</span></td><td><span class="line" style="display:inline-block;width:90px;padding:6px 8px">60</span></td><td>19 <span class="chip chip--warn">BAJO</span></td></tr>
+              <tr><td class="mono">l001</td><td>Luminosidad</td><td>klx</td><td><span class="line" style="display:inline-block;width:90px;padding:6px 8px">5</span></td><td><span class="line" style="display:inline-block;width:90px;padding:6px 8px">90</span></td><td>42</td></tr>
+              <tr><td class="mono">a001</td><td>Humedad aire</td><td>%</td><td><span class="line" style="display:inline-block;width:90px;padding:6px 8px">40</span></td><td><span class="line" style="display:inline-block;width:90px;padding:6px 8px">85</span></td><td>61</td></tr>
+            </table>
+            <p class="muted" style="font-size:12px;margin-top:8px">El umbral bajo debe ser menor que el alto. Solo el rol «admin» puede editar; «técnico» los ve en lectura.</p>
+            <span class="n" style="left:-11px;top:-11px">1</span>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div class="line" style="padding:16px;display:grid;gap:8px;position:relative"><b>Tu cuenta</b><span>Usuario: tecnico</span><span>Rol: técnico</span><span class="btn btn--ghost" style="justify-self:start">Cerrar sesión</span><span class="n" style="left:-11px;top:-11px">2</span></div>
+            <div class="line" style="padding:16px;display:grid;gap:8px;position:relative"><b>Datos y API</b><span class="muted" style="font-size:12px">Simulador de sensores, exportación y enlace a la documentación de la API.</span><span class="mono" style="font-size:12px">/docs · OpenAPI</span><span class="n" style="left:-11px;top:-11px">3</span></div>
+          </div>
+        </main></div></div>
+    </div>
+    <div><p class="lbl">Móvil · 360 × 750</p>
+      <div class="frame mob">
+        <div class="mtop"><b>Ajustes</b><span></span></div>
+        <div class="mbody">
+          <b>Umbrales</b>
+          <div class="line" style="padding:12px;display:grid;gap:8px"><div class="row"><b style="font-size:13px">Humedad suelo</b><span class="mono muted" style="font-size:11px">h001 · %</span></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><label class="field">Bajo<span class="inp" style="color:#1d1f20">25</span></label><label class="field">Alto<span class="inp" style="color:#1d1f20">60</span></label></div></div>
+          <div class="line" style="padding:12px;display:grid;gap:8px"><div class="row"><b style="font-size:13px">Temperatura</b><span class="mono muted" style="font-size:11px">t001 · ºC</span></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><label class="field">Bajo<span class="inp" style="color:#1d1f20">10</span></label><label class="field">Alto<span class="inp" style="color:#1d1f20">35</span></label></div></div>
+          <span class="muted" style="font-size:12px">+ 2 sensores más…</span>
+          <span class="btn" style="height:44px">Guardar cambios</span>
+          <span class="btn btn--ghost" style="height:44px">Cerrar sesión</span>
+        </div>
+        <div class="mtab"><span>Inicio</span><span>Parcelas</span><span>Alertas</span><span class="on">Ajustes</span></div>
+      </div>
+    </div>
+  </div>
+  <ul class="notes">
+    <li><span class="n">1</span><span><span class="mono">threshold_low</span> / <span class="mono">threshold_high</span> por sensor (<span class="mono">Sensor</span>). Validación en el formulario y en la API.</span></li>
+    <li><span class="n">2</span><span>Cerrar sesión → <span class="mono">AuthState.logout</span>: borra el token y vuelve a <span class="mono">/login</span>.</span></li>
+    <li><span class="n">3</span><span>Accesos útiles para la demo (simulador, CSV, documentación de la API).</span></li>
+  </ul>
+</section>
+
+</body>
+</html>
