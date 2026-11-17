@@ -19,7 +19,7 @@ Usuarios de ejemplo: `admin`, `tecnico`, `lector` (misma contraseña). Ingesta: 
 
 ## Convenciones
 
-- Fechas ISO 8601 en UTC con `Z`. Coordenadas lat/lon; en GeoJSON `[lon, lat]`.
+- Fechas ISO 8601 en UTC con `Z`. Un sensor envía una lectura por minuto (OFFLINE salta a los 10 min). Coordenadas lat/lon; en GeoJSON `[lon, lat]`.
 - m², litros, euros. Ids de sensor en texto (`"t001"`); el resto, enteros.
 - Errores: 401 sin token/credenciales, 403 sin permiso, 404 no existe, 422 datos inválidos.
 
@@ -46,7 +46,7 @@ Usuarios de ejemplo: `admin`, `tecnico`, `lector` (misma contraseña). Ingesta: 
 ## Qué es nuevo respecto a `demeter/state/types.py`
 
 Todo lo existente mantiene nombre y forma. Añadidos (la interfaz actual los ignora sin romperse):
-`DashboardSummary.weather/water/unread_alerts`, `Sensor.latitude/longitude/is_active`,
+`DashboardSummary.weather/water/unread_alerts`, alertas `OFFLINE` con `resolved_at`, `value` y `threshold`, `Sensor.latitude/longitude/is_active`,
 sensor de tipo `nivel_deposito`, rol `lector`, y modelos nuevos de terreno, agua, clima y costes.
 
 ## Diferencias con el modelo de datos de David (v0.2) — a decidir
