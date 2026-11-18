@@ -1,7 +1,7 @@
 # Modelo de datos — Demeter
 
-> **Versión:** 0.3
-> **Estado:** cerrado con Alex (API), Nieto (interfaz) y Mario L. (alertas). Pendiente de confirmar por Mario H. (datos)
+> **Versión:** 1.0
+> **Estado:** definitivo. Diseño cerrado con Alex (API), Nieto (interfaz), Mario L. (alertas) y Mario H. (datos). Cualquier cambio posterior se hace con una versión nueva y aviso al equipo
 > **Tarjetas:** #11 [B1] y la idea "Modelo de datos del terreno 3D"
 > **Rama:** `feature/db-modelos` · **Autor:** David · **Fecha:** 17/11/2026
 
@@ -14,7 +14,34 @@ Está alineado con el contrato de la API (`docs/api-contrato.md` y
 (`docs/alertas-contrato.md`). Donde la base de datos y la API usan nombres
 distintos, se indica en la sección 6.
 
-**Cambios respecto a la versión 0.2**
+**Cambios respecto a la versión 0.4**
+
+- Se descarta Telegram para las alertas: `users` no necesita ninguna columna
+  de mensajería (Mario L.).
+- Las predicciones a 24 h y el reparto de agua se calculan al vuelo, así que no
+  hay tabla nueva (Mario H.). Si más adelante se quiere un histórico de
+  consejos, se añadirá una tabla `irrigation_advice`.
+- Los modelos en código irán en `demeter/models/`.
+- Todo el equipo confirma que dar de baja es desactivar, no borrar.
+- Mario L. propone una lectura cada 5 minutos en vez de cada minuto; se
+  indican las dos cifras de volumen. La decisión no afecta a las tablas.
+- Se retira la sección de preguntas abiertas. Las dos que quedaban (frecuencia
+  de lecturas y si al desactivar una parcela se desactivan sus sensores)
+  afectan al simulador, a la regla `OFFLINE` y a la API, no a las tablas.
+- Resueltas y retiradas las preguntas sobre Telegram y sobre las predicciones.
+
+**Cambios respecto a la versión 0.3**
+
+- `parcels`: se añade `is_active`, para poder dar de baja una parcela sin
+  borrarla (petición de Alex).
+- Se acuerda con Alex que dar de baja es desactivar, no borrar (decisión 24).
+- Alex indica que los sensores envían una lectura por minuto; se añade el
+  cálculo de volumen de `sensor_data`.
+- Nuevas preguntas abiertas: qué pasa con los sensores de una parcela
+  desactivada, a dónde van los avisos de Telegram y si las predicciones se
+  guardan. Las dos últimas podrían añadir una columna o una tabla.
+
+**Cambios de la versión 0.2 a la 0.3**
 
 - `users`: se entra con `username` (único y obligatorio); `email` pasa a ser
   opcional; se elimina `name`.
@@ -78,6 +105,7 @@ erDiagram
         float longitude
         text boundary "opcional"
         float area_m2 "opcional"
+        boolean is_active
         datetime created_at
     }
 
@@ -190,6 +218,7 @@ Fincas monitorizadas.
 | `longitude` | decimal | Sí | Longitud del centro |
 | `boundary` | texto | No | Contorno de la parcela: polígono en GeoJSON |
 | `area_m2` | decimal | No | Superficie en metros cuadrados, calculada en el servidor |
+| `is_active` | booleano | Sí | Si la parcela está en servicio. Darla de baja es desactivarla, no borrarla |
 | `created_at` | fecha y hora | Sí | Fecha de alta (UTC) |
 
 ### 3.3 `sensors`
@@ -224,6 +253,15 @@ Lecturas recibidas. Es la tabla con más filas del sistema.
 **Índice único** sobre (`sensor_id`, `recorded_at`), en ese orden. Acelera las
 consultas por sensor y rango de fechas, e impide guardar dos veces la misma
 lectura.
+
+**Volumen estimado con 14 sensores:**
+
+| Frecuencia | Lecturas al día | Lecturas cada 30 días |
+|---|---|---|
+| Una por minuto | unas 20.000 | unas 600.000 |
+| Una cada 5 minutos | unas 4.000 | unas 120.000 |
+
+SQLite lo soporta bien en los dos casos con el índice anterior.
 
 ### 3.5 `alerts`
 
@@ -402,10 +440,12 @@ y en la API.
     El índice parcial de `alerts` existe en ambos.
 23. **Nombres de tablas y columnas en inglés y `snake_case`.** Los valores de
     las listas cerradas siguen el reto y el contrato de la API.
-
-## 8. Preguntas abiertas
-
-| # | Pregunta | Para | Afecta a |
-|---|---|---|---|
-| 1 | ¿Cada cuánto envía lecturas un sensor? (`OFFLINE` salta a los 10 minutos, así que debe ser bastante menos) | Alex, Mario L. | Volumen de `sensor_data` |
-| 2 | Al dar de baja una parcela o un sensor, ¿se borra su histórico o solo se desactiva? Propuesta: desactivar | Todos | Reglas de borrado entre tablas |
+24. **Dar de baja es desactivar, no borrar.** `users`, `parcels` y `sensors`
+    tienen `is_active`. El histórico (lecturas y alertas) se conserva siempre.
+    Confirmado por todo el equipo.
+25. **Sin Telegram.** Las alertas no se envían por Telegram, así que `users` no
+    guarda ningún dato de mensajería.
+26. **Predicciones y reparto de agua al vuelo, sin tabla.** Dependen del último
+    dato y de la previsión de lluvia; un resultado guardado quedaría viejo en
+    una hora. La única tabla futura prevista es `irrigation_advice`, si se
+    quiere histórico de consejos.
