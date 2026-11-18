@@ -218,6 +218,23 @@ def get_water(parcel_id: int, _: s.User = ANY):
     return d.water(parcel_id)
 
 
+# ---------------------------------------------------------------- insights (predicción y riego)
+
+
+@router.get("/sensors/{sensor_id}/prediction", response_model=s.SensorPrediction, tags=["insights"])
+def sensor_prediction(sensor_id: str, _: s.User = ANY):
+    pred = d.prediction(_sensor(sensor_id))
+    if pred is None:
+        raise HTTPException(404, "No hay datos suficientes para predecir")
+    return pred
+
+
+@router.get("/parcels/{parcel_id}/irrigation", response_model=s.IrrigationAdvice, tags=["insights"])
+def irrigation_advice(parcel_id: int, _: s.User = ANY):
+    _parcel(parcel_id)
+    return d.irrigation(parcel_id)
+
+
 # ---------------------------------------------------------------- terreno 3D
 
 
