@@ -1,0 +1,90 @@
+<main id="top">
+  <!-- Acto 1: la Costa Tropical al amanecer con el nombre detrás de Sierra Nevada.
+       Acto 2 (al bajar): la foto se funde en niebla y el bancal se construye en líneas. -->
+  <section class="intro" aria-labelledby="intro-h">
+    <div class="intro__stage">
+      <div class="scene" aria-hidden="true">
+        <img class="scene__bg" src="/proto/img/costa.webp" alt="">
+        <div class="scene__word">Demeter</div>
+        <img class="scene__fg" src="/proto/img/costa-frente.webp" alt="">
+        <div class="scene__word scene__word--over">Demeter</div>
+      </div>
+      <div class="fog" aria-hidden="true"></div>
+      <canvas class="wire" aria-hidden="true"></canvas>
+      <div class="wire__labels" aria-hidden="true"></div>
+
+      <div class="act1">
+        <h1 id="intro-h" class="act1__lead">Sensores de parcela en tiempo real para la Costa Tropical.</h1>
+        <div class="act1__foot">
+          <span></span>
+          <span class="scroll-hint mono">Desliza <span aria-hidden="true">↓</span></span>
+          <span></span>
+        </div>
+      </div>
+
+      <div class="act2">
+        <p class="mono act2__kicker">Gemelo digital · Bancal 3 · Almuñécar</p>
+        <h2 class="act2__title">Cada bancal,<br><em>sensor a sensor.</em></h2>
+        <p class="act2__text">Demeter guarda cada lectura y te avisa en cuanto un valor sale de su umbral.</p>
+        <a class="act2__cta" href="/dashboard">Ver el panel en vivo</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Cabina: pantalla completa con ventanas curvas, una por cosa que hace Demeter.
+       La pared y el salpicadero son un SVG; lo que se ve por cada ventana son capas HTML debajo. -->
+  <section class="cockpit" id="mundos" aria-labelledby="mundos-h" data-cockpit>
+    <h2 id="mundos-h" class="sr-only">Lo que hace Demeter</h2>
+    <div class="cab">
+      <div class="view view--l" aria-hidden="true"></div>
+      <div class="view view--c" aria-live="polite"></div>
+      <div class="view view--r" aria-hidden="true"></div>
+      <svg class="cabin" viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+  <defs>
+    <linearGradient id="wall" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--wall-hi)"/><stop offset=".55" stop-color="var(--wall)"/><stop offset="1" stop-color="var(--wall-lo)"/></linearGradient>
+    <mask id="holes" maskUnits="userSpaceOnUse" x="-100" y="-100" width="2120" height="1280"><rect x="-100" y="-100" width="2120" height="1280" fill="#fff"/><g fill="#000"><path d="M630 92 Q960.0 76 1290 92 Q1420 92 1420 222 Q1429.6 396.0 1420 570 Q1420 700 1290 700 Q960.0 716 630 700 Q500 700 500 570 Q490.4 396.0 500 222 Q500 92 630 92 Z"/><path d="M-60 34 C120 40 250 70 300 104 Q352 124 360 200 C372 330 372 480 360 600 Q352 684 298 704 C230 728 80 752 -60 760 Z"/><path d="M-60 34 C120 40 250 70 300 104 Q352 124 360 200 C372 330 372 480 360 600 Q352 684 298 704 C230 728 80 752 -60 760 Z" transform="translate(1920 0) scale(-1 1)"/></g></mask>
+  </defs>
+  <g mask="url(#holes)">
+    <rect x="-100" y="-100" width="2120" height="1280" fill="url(#wall)"/>
+    <path d="M330 -10 Q960 46 1590 -10" fill="none" stroke="var(--line)" stroke-width="2"/>
+    <path d="M300 30 Q960 70 1620 30" fill="none" stroke="var(--line-soft)" stroke-width="2"/>
+    <path d="M410 120 C430 360 430 520 410 760" fill="none" stroke="var(--line-soft)" stroke-width="2"/>
+    <path d="M1510 120 C1490 360 1490 520 1510 760" fill="none" stroke="var(--line-soft)" stroke-width="2"/>
+    <path d="M-40 820 Q960 770 1960 820" fill="none" stroke="var(--line)" stroke-width="2"/>
+    <path d="M630 92 Q960.0 76 1290 92 Q1420 92 1420 222 Q1429.6 396.0 1420 570 Q1420 700 1290 700 Q960.0 716 630 700 Q500 700 500 570 Q490.4 396.0 500 222 Q500 92 630 92 Z" fill="none" stroke="var(--line)" stroke-width="96"/><path d="M630 92 Q960.0 76 1290 92 Q1420 92 1420 222 Q1429.6 396.0 1420 570 Q1420 700 1290 700 Q960.0 716 630 700 Q500 700 500 570 Q490.4 396.0 500 222 Q500 92 630 92 Z" fill="none" stroke="var(--bezel)" stroke-width="92"/><path d="M630 92 Q960.0 76 1290 92 Q1420 92 1420 222 Q1429.6 396.0 1420 570 Q1420 700 1290 700 Q960.0 716 630 700 Q500 700 500 570 Q490.4 396.0 500 222 Q500 92 630 92 Z" fill="none" stroke="var(--line)" stroke-width="58"/><path d="M630 92 Q960.0 76 1290 92 Q1420 92 1420 222 Q1429.6 396.0 1420 570 Q1420 700 1290 700 Q960.0 716 630 700 Q500 700 500 570 Q490.4 396.0 500 222 Q500 92 630 92 Z" fill="none" stroke="var(--bezel-2)" stroke-width="54"/><path d="M630 92 Q960.0 76 1290 92 Q1420 92 1420 222 Q1429.6 396.0 1420 570 Q1420 700 1290 700 Q960.0 716 630 700 Q500 700 500 570 Q490.4 396.0 500 222 Q500 92 630 92 Z" fill="none" stroke="var(--line)" stroke-width="16"/><path d="M630 92 Q960.0 76 1290 92 Q1420 92 1420 222 Q1429.6 396.0 1420 570 Q1420 700 1290 700 Q960.0 716 630 700 Q500 700 500 570 Q490.4 396.0 500 222 Q500 92 630 92 Z" fill="none" stroke="var(--glass-rim)" stroke-width="12"/><path d="M-60 34 C120 40 250 70 300 104 Q352 124 360 200 C372 330 372 480 360 600 Q352 684 298 704 C230 728 80 752 -60 760 Z" fill="none" stroke="var(--line)" stroke-width="96"/><path d="M-60 34 C120 40 250 70 300 104 Q352 124 360 200 C372 330 372 480 360 600 Q352 684 298 704 C230 728 80 752 -60 760 Z" fill="none" stroke="var(--bezel)" stroke-width="92"/><path d="M-60 34 C120 40 250 70 300 104 Q352 124 360 200 C372 330 372 480 360 600 Q352 684 298 704 C230 728 80 752 -60 760 Z" fill="none" stroke="var(--line)" stroke-width="58"/><path d="M-60 34 C120 40 250 70 300 104 Q352 124 360 200 C372 330 372 480 360 600 Q352 684 298 704 C230 728 80 752 -60 760 Z" fill="none" stroke="var(--bezel-2)" stroke-width="54"/><path d="M-60 34 C120 40 250 70 300 104 Q352 124 360 200 C372 330 372 480 360 600 Q352 684 298 704 C230 728 80 752 -60 760 Z" fill="none" stroke="var(--line)" stroke-width="16"/><path d="M-60 34 C120 40 250 70 300 104 Q352 124 360 200 C372 330 372 480 360 600 Q352 684 298 704 C230 728 80 752 -60 760 Z" fill="none" stroke="var(--glass-rim)" stroke-width="12"/><path d="M-60 34 C120 40 250 70 300 104 Q352 124 360 200 C372 330 372 480 360 600 Q352 684 298 704 C230 728 80 752 -60 760 Z" transform="translate(1920 0) scale(-1 1)" fill="none" stroke="var(--line)" stroke-width="96"/><path d="M-60 34 C120 40 250 70 300 104 Q352 124 360 200 C372 330 372 480 360 600 Q352 684 298 704 C230 728 80 752 -60 760 Z" transform="translate(1920 0) scale(-1 1)" fill="none" stroke="var(--bezel)" stroke-width="92"/><path d="M-60 34 C120 40 250 70 300 104 Q352 124 360 200 C372 330 372 480 360 600 Q352 684 298 704 C230 728 80 752 -60 760 Z" transform="translate(1920 0) scale(-1 1)" fill="none" stroke="var(--line)" stroke-width="58"/><path d="M-60 34 C120 40 250 70 300 104 Q352 124 360 200 C372 330 372 480 360 600 Q352 684 298 704 C230 728 80 752 -60 760 Z" transform="translate(1920 0) scale(-1 1)" fill="none" stroke="var(--bezel-2)" stroke-width="54"/><path d="M-60 34 C120 40 250 70 300 104 Q352 124 360 200 C372 330 372 480 360 600 Q352 684 298 704 C230 728 80 752 -60 760 Z" transform="translate(1920 0) scale(-1 1)" fill="none" stroke="var(--line)" stroke-width="16"/><path d="M-60 34 C120 40 250 70 300 104 Q352 124 360 200 C372 330 372 480 360 600 Q352 684 298 704 C230 728 80 752 -60 760 Z" transform="translate(1920 0) scale(-1 1)" fill="none" stroke="var(--glass-rim)" stroke-width="12"/>
+  </g>
+  <!-- salpicadero: tres pantallas -->
+  <g class="dash-svg">
+    <path d="M-60 852 Q240 826 500 818 Q540 818 544 852 L552 1120 L-60 1120 Z" fill="var(--dash)"/>
+    <path d="M-60 878 Q230 854 486 846 Q516 846 518 874 L524 1120 L-60 1120 Z" fill="var(--screen)"/>
+    <path d="M592 830 Q592 806 622 806 L1298 806 Q1328 806 1328 830 L1328 1120 L592 1120 Z" fill="var(--dash)"/>
+    <path d="M620 854 Q620 832 646 832 L1274 832 Q1300 832 1300 854 L1300 1120 L620 1120 Z" fill="var(--screen)"/>
+    <g transform="translate(1920 0) scale(-1 1)">
+      <path d="M-60 852 Q240 826 500 818 Q540 818 544 852 L552 1120 L-60 1120 Z" fill="var(--dash)"/>
+      <path d="M-60 878 Q230 854 486 846 Q516 846 518 874 L524 1120 L-60 1120 Z" fill="var(--screen)"/>
+    </g>
+    <g fill="none" stroke="var(--trace)" stroke-width="2">
+      <path d="M0 980 Q240 962 470 956"/><path d="M0 1040 Q240 1020 476 1012"/><path d="M60 880 L40 1120 M170 872 L160 1120 M280 866 L278 1120 M390 860 L394 1120"/>
+      <path d="M720 900 L720 1120 M1200 900 L1200 1120"/><path d="M790 920 L790 880 L860 880 M1130 880 L1200 880 L1200 920" stroke-width="3"/>
+      <path d="M800 1120 Q960 990 1120 1120"/><path d="M960 1000 L960 1120"/>
+      <g transform="translate(1920 0) scale(-1 1)"><circle cx="240" cy="1100" r="190"/><circle cx="240" cy="1100" r="110"/></g>
+    </g>
+    <circle class="blip" cx="830" cy="1062" r="12" fill="var(--blip)"/>
+  </g>
+</svg>
+      <div class="cab__mid">
+        <p class="cab__hint">Desliza para explorar los mundos</p>
+        <div class="cab__nav">
+          <button class="cab__arrow" type="button" data-step="-1" aria-label="Mundo anterior"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M10 3 5 8l5 5"/></svg></button>
+          <span class="cab__dots" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+          <button class="cab__arrow" type="button" data-step="1" aria-label="Mundo siguiente"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m6 3 5 5-5 5"/></svg></button>
+        </div>
+        <p class="cab__read mono"></p>
+      </div>
+    </div>
+  </section>
+
+  <section class="next" id="panel">
+    <p class="mono">Aquí sigue la landing (panel, API, código…)</p>
+  </section>
+</main>

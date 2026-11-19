@@ -31,6 +31,11 @@ HOME_AFTER_LOGIN = "/dashboard"
 PUBLIC_ROUTES = frozenset({"/", LOGIN_ROUTE})
 
 
+def destino_panel(con_sesion: bool) -> str:
+    """A dónde lleva «Ver el panel» desde la portada: al panel, o al login y luego al panel."""
+    return HOME_AFTER_LOGIN if con_sesion else f"{LOGIN_ROUTE}?next={HOME_AFTER_LOGIN}"
+
+
 class AuthState(rx.State):
     """Estado de la sesión, compartido por todas las páginas."""
 
@@ -48,6 +53,11 @@ class AuthState(rx.State):
     def is_authenticated(self) -> bool:
         """Hay sesión si hay token. Que el token sea válido lo decide la API."""
         return bool(self.token)
+
+    @rx.var
+    def inicial(self) -> str:
+        """Letra del avatar de la barra («T» de tecnico)."""
+        return (self.username[:1] or "?").upper()
 
     @rx.var
     def is_admin(self) -> bool:
@@ -71,6 +81,11 @@ class AuthState(rx.State):
         if here in PUBLIC_ROUTES:
             return None
         return rx.redirect(f"{LOGIN_ROUTE}?next={here}")
+
+    @rx.event
+    def ir_al_panel(self):
+        """Botón «Ver el panel en vivo» de la portada (C2): al panel o al login."""
+        return rx.redirect(destino_panel(self.is_authenticated))
 
     @rx.event
     def redirect_if_logged_in(self):

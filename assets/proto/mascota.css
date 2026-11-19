@@ -1,0 +1,127 @@
+/* Demeter · Demetreo, la mascota: pie de página, página 404 y aviso de alerta nueva. */
+
+/* ---------------------------------------------------------------- el dibujo y sus estados */
+.ag { display: block; overflow: visible; --lid: .48; }
+/* párpado: la tapa entera baja o sube (abierto = -30, cerrado = 0), así el borde curvo no se deforma */
+.ag__lidg { transform: translateY(calc((var(--lid) - 1) * 30px)); transition: transform .2s cubic-bezier(.3, .7, .4, 1); }
+.ag.is-blink .ag__lidg { transform: translateY(0); transition-duration: .06s; }
+.ag__pupil { transition: transform .12s ease-out; }
+.ag[data-mood="perdido"] .ag__pupil { transition-duration: .45s; transition-timing-function: cubic-bezier(.23, 1, .32, 1); }
+.ag__brow, .ag__mouth, .ag__drop, .ag__q { opacity: 0; transition: opacity .2s ease; }
+.ag[data-mood="ok"] .ag__mouth--ok,
+.ag[data-mood="alerta"] .ag__mouth--alerta,
+.ag[data-mood="perdido"] .ag__mouth--perdido,
+.ag[data-mood="alerta"] .ag__brow,
+.ag[data-mood="alerta"] .ag__drop,
+.ag[data-mood="perdido"] .ag__brow--l,
+.ag[data-mood="perdido"] .ag__q { opacity: 1; }
+.ag[data-mood="alerta"] .ag__pupil circle:first-child { r: 6; }
+/* cejas: preocupadas en alerta, una levantada cuando está perdido */
+.ag[data-mood="alerta"] .ag__brow--l { transform: rotate(-14deg) translateY(-2px); }
+.ag[data-mood="alerta"] .ag__brow--r { transform: rotate(14deg) translateY(-2px); }
+.ag[data-mood="perdido"] .ag__brow--l { transform: translateY(-7px) rotate(-6deg); }
+.ag__brow { transform-box: fill-box; transform-origin: center; transition: opacity .2s ease, transform .2s ease; }
+.ag[data-mood="alerta"] .ag__cheek { opacity: .15; }
+/* brazos y piernas */
+.ag__wave { transform-box: view-box; transform-origin: 160px 150px; animation: ag-wave 1.1s ease-in-out infinite; }
+@keyframes ag-wave { 50% { transform: rotate(-16deg); } }
+.ag__arm-l { transform-box: view-box; transform-origin: 40px 150px; animation: ag-point 1.4s ease-in-out infinite; }
+@keyframes ag-point { 50% { transform: rotate(6deg) translate(-3px, -2px); } }
+.ag__spark { animation: ag-spark 1.4s ease-in-out infinite; }
+@keyframes ag-spark { 0%, 100% { opacity: .2; } 50% { opacity: 1; } }
+.ag__leg { transform-box: view-box; animation: ag-swing 1.8s ease-in-out infinite; }
+.ag__leg--l { transform-origin: 82px 248px; } .ag__leg--r { transform-origin: 118px 248px; animation-delay: -.9s; }
+@keyframes ag-swing { 0%, 100% { transform: rotate(8deg); } 50% { transform: rotate(-8deg); } }
+.ag[data-mood="alerta"] .ag__drop { animation: ag-sweat 1.6s ease-in infinite; }
+@keyframes ag-sweat { 0% { transform: translateY(-4px); opacity: 0; } 20% { opacity: 1; } 100% { transform: translateY(16px); opacity: 0; } }
+.ag[data-mood="perdido"] .ag__q { animation: ag-q 2.4s ease-in-out infinite; transform-box: fill-box; transform-origin: bottom left; }
+@keyframes ag-q { 50% { transform: rotate(12deg) translateY(-3px); } }
+
+/* ---------------------------------------------------------------- pie de página (asoma por abajo) */
+.mf { position: relative; z-index: 1; overflow: hidden; background: #dfe6cf; color: var(--ink); padding: 48px 32px 0; }
+.mf__top { max-width: 1180px; margin: 0 auto; display: grid; grid-template-columns: 1fr 1fr auto 1fr 1fr; gap: 24px; align-items: start; }
+.mf__col { display: grid; gap: 8px; font-size: 14px; }
+.mf__col:nth-child(4), .mf__col:nth-child(5) { justify-items: end; text-align: right; }
+.mf__col a, .mf__col span { color: #3a4a2c; transition: color .15s ease; width: fit-content; }
+.mf__col a:hover { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
+.mf__h { margin: 0 0 4px; font: 12px "Geist Mono", monospace; letter-spacing: .06em; text-transform: uppercase; color: var(--ink); }
+.mf__word { font: italic 400 clamp(44px, 5vw, 64px)/1 "Instrument Serif", serif; letter-spacing: -.02em; color: #2c4317; padding: 0 12px; }
+
+.mf__stage { position: relative; display: grid; justify-items: center; margin-top: 18px; }
+.mf__status { position: relative; z-index: 2; margin: 0 0 14px; display: inline-flex; align-items: center; gap: 8px; height: 34px; padding: 0 14px; border-radius: 99px;
+  background: rgba(255,255,255,.55); font-size: 14px; color: var(--ink); }
+.mf__status i { width: 8px; height: 8px; border-radius: 50%; background: #2f8a63; }
+.mf__status i.is-warn { background: var(--warn, #b33a12); }
+.mf__status a { color: var(--warn, #b33a12); font-weight: 600; }
+.mf__demo { position: absolute; right: 0; top: 0; height: 32px; padding: 0 14px; border-radius: 99px; border: 1px dashed rgba(18,24,26,.35); background: transparent;
+  font: 13px "Mona Sans", sans-serif; color: var(--ink); cursor: pointer; transition: background-color .15s ease, transform .16s var(--ease); }
+.mf__demo:hover { background: rgba(255,255,255,.5); } .mf__demo:active { transform: scale(.97); }
+/* el foso: el aguacate entero está dentro, pero solo se ve la mitad de arriba */
+.mf__pit { width: min(340px, 72vw); aspect-ratio: 340 / 268; overflow: hidden; }
+.ag--foot { width: 100%; transform: translateY(4%); transition: transform .5s var(--ease); }
+.mf:hover .ag--foot { transform: translateY(0); }
+.mf__legal { margin: 0 -32px; padding: 14px 32px; background: #2c4317; color: #dfe6cf; text-align: center; font-size: 12px; }
+
+/* ---------------------------------------------------------------- aviso de alerta nueva */
+.mpeek { position: fixed; z-index: 45; right: 28px; bottom: 0; display: flex; align-items: flex-end; gap: 10px; pointer-events: none; }
+.mpeek[hidden] { display: none; }
+.mpeek__pit { width: 300px; height: 222px; overflow: hidden; pointer-events: auto; }
+.ag--peek { width: 100%; transform: translateY(105%); }
+.mpeek.is-in .ag--peek { animation: ag-rise .7s cubic-bezier(.34, 1.56, .64, 1) forwards, ag-wobble 1.2s ease-in-out .7s 2; }
+.ag--peek.is-jolt { animation: ag-jolt .35s ease-out !important; transform: translateY(6%); }
+@keyframes ag-rise { from { transform: translateY(105%); } to { transform: translateY(6%); } }
+@keyframes ag-wobble { 0%, 100% { transform: translateY(6%) rotate(0); } 25% { transform: translateY(6%) rotate(-5deg); } 75% { transform: translateY(6%) rotate(5deg); } }
+@keyframes ag-jolt { 40% { transform: translateY(0) rotate(-4deg); } 100% { transform: translateY(6%); } }
+
+.mpeek__bubble { position: relative; margin-bottom: 150px; margin-right: -40px; width: min(310px, calc(100vw - 230px)); padding: 14px 16px 14px; border-radius: 18px 18px 4px 18px; background: var(--ink); color: #fff;
+  box-shadow: 0 14px 34px rgba(0,0,0,.24); pointer-events: auto; opacity: 0; transform: translateY(8px) scale(.96); transform-origin: bottom right;
+  transition: opacity .25s ease, transform .3s var(--ease); }
+.mpeek.is-in .mpeek__bubble { opacity: 1; transform: none; transition-delay: .35s; }
+.mpeek__k { margin: 0 0 6px; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: #ffb48a; }
+.mpeek__t { margin: 0; font-size: 17px; font-weight: 600; letter-spacing: -.01em; }
+.mpeek__s { margin: 4px 0 0; font-size: 14px; line-height: 1.4; color: rgba(255,255,255,.78); }
+.mpeek__more { margin: 6px 0 0; font-size: 12px; color: #ffb48a; } .mpeek__more:empty { display: none; }
+.mpeek__act { display: flex; gap: 8px; margin-top: 12px; }
+.mpeek__go, .mpeek__no { display: inline-flex; align-items: center; white-space: nowrap; height: 32px; padding: 0 14px; border-radius: 99px; font: 500 13px "Mona Sans", sans-serif; cursor: pointer; transition: transform .16s var(--ease), background-color .15s ease; }
+.mpeek__go { background: #fff; color: var(--ink); border: 0; }
+.mpeek__no { background: transparent; color: #fff; border: 1px solid rgba(255,255,255,.35); }
+.mpeek__no:hover { background: rgba(255,255,255,.1); }
+.mpeek__go:active, .mpeek__no:active { transform: scale(.97); }
+
+/* ---------------------------------------------------------------- página 404 */
+.e404 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 48px; align-items: center; min-height: calc(100svh - 240px); }
+.e404 [data-mascot-404] { position: relative; display: grid; justify-items: center; }
+.e404 .ag--hero { width: min(360px, 72vw); animation: ag-float 4s ease-in-out infinite; }
+.e404 [data-mascot-404]::after { content: ""; width: 46%; height: 18px; margin-top: 18px; border-radius: 50%; background: rgba(18,24,26,.16); animation: ag-shadow 4s ease-in-out infinite; }
+@keyframes ag-shadow { 50% { transform: scaleX(.86); opacity: .7; } }
+@keyframes ag-float { 50% { transform: translateY(-10px) rotate(-2deg); } }
+.e404__t { display: grid; gap: 18px; justify-items: start; }
+.e404__t p { margin: 0; max-width: 42ch; font-size: 17px; line-height: 1.5; color: #2b3438; }
+.e404__n { font: 800 clamp(96px, 14vw, 180px)/.8 "Mona Sans"; font-stretch: 75%; letter-spacing: -.02em; color: #3e5a22; }
+.e404__act { display: flex; gap: 10px; flex-wrap: wrap; }
+
+/* ---------------------------------------------------------------- teléfono y tableta */
+@media (max-width: 900px) {
+  .mf__top { grid-template-columns: 1fr 1fr; }
+  .mf__word { grid-column: 1 / -1; grid-row: 1; text-align: center; }
+  .mf__col:nth-child(4), .mf__col:nth-child(5) { justify-items: start; text-align: left; }
+  .e404 { grid-template-columns: 1fr; text-align: left; gap: 24px; }
+}
+@media (max-width: 760px) {
+  .mf { padding: 40px 18px 0; }
+  .mf__legal { margin: 0 -18px; padding: 14px 18px; }
+  .mf__demo { position: static; margin-bottom: 10px; }
+  body.has-tabs .mf__legal { padding-bottom: calc(92px + env(safe-area-inset-bottom)); }
+  /* el aviso asoma justo por encima de las pestañas */
+  body.has-tabs .mpeek { left: 12px; right: 8px; bottom: calc(76px + env(safe-area-inset-bottom)); }
+  .mpeek__pit { flex: none; width: 156px; height: 116px; }
+  .mpeek__bubble { flex: 1; width: auto; margin-bottom: 60px; margin-right: -4px; padding: 12px 14px; }
+  .mpeek__t { font-size: 16px; }
+}
+
+/* sin animaciones para quien las tiene reducidas: el aviso aparece sin más */
+@media (prefers-reduced-motion: reduce) {
+  .ag *, .ag { animation: none !important; transition: none !important; }
+  .mpeek.is-in .ag--peek { transform: translateY(6%); }
+  .mpeek__bubble { transition: none; }
+}
