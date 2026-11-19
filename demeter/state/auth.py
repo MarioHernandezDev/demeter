@@ -55,6 +55,11 @@ class AuthState(rx.State):
         return bool(self.token)
 
     @rx.var
+    def inicial(self) -> str:
+        """Letra del avatar de la barra («T» de tecnico)."""
+        return (self.username[:1] or "?").upper()
+
+    @rx.var
     def is_admin(self) -> bool:
         """Solo el administrador puede editar umbrales (pantalla 06)."""
         return self.role == Role.ADMIN.value

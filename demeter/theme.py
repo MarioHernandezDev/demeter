@@ -1,5 +1,7 @@
 """Tema visual de Demeter: paleta, tipografía y medidas (C2, issue #29).
 
+Son los valores del prototipo «Demeter web completa con Demetreo griego».
+
 Todo el aspecto de la app sale de aquí. Si el equipo cambia la paleta, se cambia
 solo en este archivo (y en ``docs/diseno.md``): las páginas usan las variables CSS
 ``--dm-*`` que genera :func:`css_global`, nunca colores escritos a mano.
@@ -30,9 +32,12 @@ FUENTES: dict[str, str] = {
     "mono": "'Geist Mono', ui-monospace, 'SFMono-Regular', monospace",  # cifras y etiquetas
 }
 GOOGLE_FONTS = (
-    "https://fonts.googleapis.com/css2?family=Mona+Sans:wdth,wght@75..125,400..800"
-    "&family=Instrument+Serif:ital@1&family=Geist+Mono:wght@400;500&display=swap"
+    "https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Instrument+Serif:ital@1"
+    "&family=Mona+Sans:wdth,wght@75..125,200..900&family=Geist+Mono:wght@400..500&display=swap"
 )
+# Hojas del prototipo (assets/proto/), en el orden en que se cargan.
+HOJAS_PORTADA = ("/proto/proto.css", "/proto/mascota.css")
+HOJAS_APP = ("/proto/proto.css", "/proto/app.css", "/proto/mascota.css")
 
 # ---------------------------------------------------------------- medidas
 MEDIDAS: dict[str, str] = {
@@ -42,7 +47,8 @@ MEDIDAS: dict[str, str] = {
     "pestanas_alto": "64px",  # pestañas inferiores en móvil
     "ancho_max": "1200px",
 }
-# Por debajo de este ancho la barra superior se convierte en pestañas abajo.
+# Por debajo de este ancho la barra superior se convierte en pestañas abajo
+# (lo aplica assets/proto/app.css).
 CORTE_MOVIL_PX = 760
 
 
@@ -53,68 +59,11 @@ def variables_css() -> str:
 
 
 def css_global() -> str:
-    """CSS común a todas las páginas: variables, base y el responsive del layout.
+    """Variables ``--dm-*`` para el código Reflex nuevo.
 
-    Se inyecta una vez en el ``<head>`` desde ``demeter/demeter.py``.
+    El aspecto actual de las páginas lo dan las hojas del prototipo en
+    ``assets/proto/`` (mismos colores que aquí). Cuando cada rama sustituya su
+    plantilla por componentes Reflex, usará estas variables en lugar de las del
+    prototipo; así hay una sola fuente de verdad para la paleta.
     """
-    m = CORTE_MOVIL_PX
-    return f""":root {{
-{variables_css()}
-}}
-html, body {{ margin: 0; background: var(--dm-papel); color: var(--dm-tinta);
-  font-family: var(--dm-fuente-sans); -webkit-font-smoothing: antialiased; }}
-a {{ color: inherit; }}
-.dm-shell {{ min-height: 100dvh; display: flex; flex-direction: column; }}
-
-/* Barra superior (escritorio) */
-.dm-bar {{ position: sticky; top: 0; z-index: 20; height: var(--dm-barra-alto);
-  display: flex; align-items: center; gap: 28px; padding: 0 24px;
-  background: color-mix(in srgb, var(--dm-papel) 86%, transparent);
-  backdrop-filter: blur(12px); border-bottom: 1px solid var(--dm-linea); }}
-.dm-marca {{ display: flex; align-items: center; gap: 10px; text-decoration: none; }}
-.dm-marca img {{ width: 30px; height: 30px; }}
-.dm-marca span {{ font-weight: 800; font-stretch: 75%; font-size: 24px; letter-spacing: .01em; }}
-.dm-nav {{ display: flex; gap: 4px; }}
-.dm-nav a {{ position: relative; padding: 8px 12px; border-radius: 10px; text-decoration: none;
-  color: var(--dm-tinta-suave); font-weight: 500; }}
-.dm-nav a:hover {{ color: var(--dm-tinta); background: var(--dm-papel-2); }}
-.dm-nav a[aria-current="page"] {{ color: var(--dm-tinta); background: var(--dm-papel-2); }}
-.dm-badge {{ display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px;
-  margin-left: 6px; border-radius: 99px; background: var(--dm-acento); color: #fff;
-  font: 500 11px/1 var(--dm-fuente-mono); }}
-.dm-bar__fin {{ margin-left: auto; display: flex; align-items: center; gap: 12px; }}
-
-/* Contenido */
-.dm-main {{ flex: 1; width: 100%; max-width: var(--dm-ancho-max); margin: 0 auto;
-  padding: 32px 24px 48px; box-sizing: border-box; min-width: 0; }}
-.dm-titulo {{ margin: 0 0 6px; font-size: clamp(28px, 4vw, 40px); font-weight: 600; letter-spacing: -.03em; }}
-.dm-sub {{ margin: 0 0 28px; color: var(--dm-tinta-suave); }}
-.dm-rejilla {{ display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); }}
-.dm-tarjeta {{ background: var(--dm-papel-2); border: 1px solid var(--dm-linea);
-  border-radius: var(--dm-radio-grande); padding: 20px; min-width: 0; }}
-.dm-hueco {{ border-style: dashed; color: var(--dm-tinta-suave); }}
-.dm-etiqueta {{ font: 500 12px/1.4 var(--dm-fuente-mono); letter-spacing: .08em; text-transform: uppercase;
-  color: var(--dm-tinta-suave); }}
-.dm-boton {{ display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 44px;
-  padding: 0 20px; border: 0; border-radius: 12px; background: var(--dm-acento); color: #fff;
-  font: 600 15px/1 var(--dm-fuente-sans); text-decoration: none; cursor: pointer; }}
-.dm-boton:hover {{ filter: brightness(1.08); }}
-.dm-boton--sec {{ background: transparent; color: var(--dm-tinta); border: 1px solid var(--dm-linea); }}
-:focus-visible {{ outline: 2px solid var(--dm-acento); outline-offset: 2px; }}
-
-/* Pestañas inferiores (móvil) */
-.dm-pestanas {{ display: none; }}
-@media (max-width: {m}px) {{
-  .dm-nav, .dm-bar__fin .dm-usuario {{ display: none; }}
-  .dm-bar {{ padding: 0 16px; }}
-  .dm-main {{ padding: 20px 16px calc(var(--dm-pestanas-alto) + 28px); }}
-  .dm-pestanas {{ display: grid; grid-template-columns: repeat(4, 1fr); position: fixed; inset: auto 0 0;
-    z-index: 20; height: calc(var(--dm-pestanas-alto) + env(safe-area-inset-bottom));
-    padding-bottom: env(safe-area-inset-bottom); background: var(--dm-tinta); }}
-  .dm-pestanas a {{ display: grid; place-items: center; align-content: center; gap: 4px; text-decoration: none;
-    color: rgba(255, 255, 255, .62); font-size: 11px; -webkit-tap-highlight-color: transparent; }}
-  .dm-pestanas a[aria-current="page"] {{ color: #fff; }}
-  .dm-pestanas svg {{ width: 22px; height: 22px; }}
-}}
-@media (prefers-reduced-motion: reduce) {{ * {{ transition: none !important; animation: none !important; }} }}
-"""
+    return f":root {{\n{variables_css()}\n}}\n"

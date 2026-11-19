@@ -12,12 +12,13 @@ import reflex as rx
 class UIState(rx.State):
     """Estado del layout."""
 
+    # Mientras tanto vale 2, las alertas sin leer de los datos de ejemplo del prototipo.
     # TODO(D3 · feature/alertas-pagina): rellenarlo con GET /api/dashboard
     # (``unread_alerts``) al cargar cada página privada y por WebSocket después.
-    alertas_sin_leer: int = 0
+    alertas_sin_leer: int = 2
 
     @rx.var
     def texto_alertas(self) -> str:
-        """Lo que se pinta en la burbuja: a partir de 100 basta con «99+»."""
+        """Lo que se pinta en la burbuja: nada si no hay, y «99+» a partir de 100."""
         n = self.alertas_sin_leer
-        return "99+" if n > 99 else str(n)
+        return "" if n <= 0 else "99+" if n > 99 else str(n)
