@@ -1,0 +1,80 @@
+# Dueños del código: GitHub pide su revisión en cada PR que toque estas rutas.
+# Gana la última regla que coincide, así que lo general va arriba.
+#
+#   A · API y arquitectura ........ @AlejandroSD2006
+#   B · BD, simulador y README .... @DavidMC-35
+#   C · Interfaz y pitch .......... @N13T4C0
+#   D · Alertas, dashboard y QA ... @mlunlop
+#   E · Repo, CI, Docker, insights  @MarioHernandezDev
+
+# Por defecto (y configuración del repo): E
+*                               @MarioHernandezDev
+/.github/                       @MarioHernandezDev
+/LICENSE                        @MarioHernandezDev
+/requirements.txt               @MarioHernandezDev
+/rxconfig.py                    @MarioHernandezDev
+/.env.example                   @MarioHernandezDev
+/Dockerfile                     @MarioHernandezDev
+/docker-compose.yml             @MarioHernandezDev
+
+# A · API
+/demeter/api/                   @AlejandroSD2006
+/tests/test_api*.py             @AlejandroSD2006
+/docs/api-contrato.md           @AlejandroSD2006
+/docs/arquitectura.md           @AlejandroSD2006
+/docs/adr/                      @AlejandroSD2006
+
+# B · Base de datos y simulador
+/demeter/models/                @DavidMC-35
+/demeter/db/                    @DavidMC-35
+/simulator/                     @DavidMC-35
+/alembic/                       @DavidMC-35
+/alembic.ini                    @DavidMC-35
+/data/                          @DavidMC-35
+/tests/test_models.py           @DavidMC-35
+/tests/test_simulator.py        @DavidMC-35
+/tests/test_repository.py       @DavidMC-35
+/docs/modelo-datos.md           @DavidMC-35
+/README.md                      @DavidMC-35
+
+# C · Interfaz
+/demeter/demeter.py             @N13T4C0
+/demeter/theme.py               @N13T4C0
+/demeter/pages/                 @N13T4C0
+/demeter/components/            @N13T4C0
+/demeter/state/                 @N13T4C0
+/assets/                        @N13T4C0
+/tests/test_layout.py           @N13T4C0
+/tests/test_state*.py           @N13T4C0
+/docs/diseno.md                 @N13T4C0
+/docs/wireframes/               @N13T4C0
+/docs/pitch/                    @N13T4C0
+
+# D · Alertas y dashboard
+/demeter/services/alert_rules.py  @mlunlop
+/demeter/services/alerts.py       @mlunlop
+/demeter/services/notify.py       @mlunlop
+/demeter/pages/dashboard.py       @mlunlop
+/demeter/pages/alertas.py         @mlunlop
+/demeter/state/dashboard_state.py @mlunlop
+/demeter/state/alert_state.py     @mlunlop
+/demeter/components/sensor_card.py   @mlunlop
+/demeter/components/history_chart.py @mlunlop
+/demeter/components/alert_badge.py   @mlunlop
+/tests/test_alert*.py             @mlunlop
+/docs/alertas-contrato.md         @mlunlop
+/docs/bitacora.md                 @mlunlop
+/docs/plan-pruebas.md             @mlunlop
+/CHANGELOG.md                     @mlunlop
+
+# E · Insights (predicción, riego, exportación) y demo
+/demeter/services/forecast.py     @MarioHernandezDev
+/demeter/services/irrigation.py   @MarioHernandezDev
+/demeter/services/export.py       @MarioHernandezDev
+/demeter/pages/insights.py        @MarioHernandezDev
+/demeter/state/insights_state.py  @MarioHernandezDev
+/demeter/components/forecast_chart.py @MarioHernandezDev
+/tests/test_forecast.py           @MarioHernandezDev
+/tests/test_irrigation.py         @MarioHernandezDev
+/docs/insights-contrato.md        @MarioHernandezDev
+/docs/demo/                       @MarioHernandezDev
