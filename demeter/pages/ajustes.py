@@ -1,23 +1,20 @@
-"""``/ajustes``: umbrales de los sensores (solo admin), exportación y cuenta."""
+"""``/ajustes``: maqueta del prototipo dentro de ``layout()`` (C2, issue #29).
+
+Requiere sesión. El contenido es la plantilla ``plantillas/ajustes.html`` con datos de
+ejemplo; la rama de esta pantalla la sustituye por componentes con datos de la API
+(ver ``demeter/components/prototipo.py``).
+"""
 
 import reflex as rx
 
-from demeter.components.layout import cabecera, hueco, layout
+from demeter.components import prototipo
+from demeter.components.layout import layout
 from demeter.state.auth import AuthState
 
 
 @rx.page(route="/ajustes", title="Ajustes · Demeter", on_load=AuthState.require_login)
 def ajustes() -> rx.Component:
     return layout(
-        cabecera("Ajustes", "Umbrales, exportación de datos y tu cuenta."),
-        rx.el.div(
-            rx.cond(
-                AuthState.is_admin,
-                hueco("Umbrales por sensor", "feature/ui-umbrales"),
-                hueco("Umbrales por sensor", "feature/ui-umbrales", "Solo el administrador puede editarlos."),
-            ),
-            hueco("Exportar datos", "feature/exportacion", "CSV del histórico."),
-            class_name="dm-rejilla",
-        ),
+        prototipo.contenido("ajustes", "app has-tabs p-ajustes", scripts=("app.js", "mascota.js")),
         activa="/ajustes",
     )

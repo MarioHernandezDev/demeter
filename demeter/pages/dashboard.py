@@ -1,24 +1,20 @@
-"""``/dashboard``: panel con el último valor de cada sensor y las alertas activas.
+"""``/dashboard``: maqueta del prototipo dentro de ``layout()`` (C2, issue #29).
 
-C2 deja el marco; cada hueco dice qué rama lo rellena.
+Requiere sesión. El contenido es la plantilla ``plantillas/panel.html`` con datos de
+ejemplo; la rama de esta pantalla la sustituye por componentes con datos de la API
+(ver ``demeter/components/prototipo.py``).
 """
 
 import reflex as rx
 
-from demeter.components.layout import cabecera, hueco, layout
+from demeter.components import prototipo
+from demeter.components.layout import layout
 from demeter.state.auth import AuthState
 
 
 @rx.page(route="/dashboard", title="Panel · Demeter", on_load=AuthState.require_login)
 def dashboard() -> rx.Component:
     return layout(
-        cabecera("Panel", "Último valor de cada sensor y lo que necesita tu atención."),
-        rx.el.div(
-            hueco("Lecturas actuales", "feature/dashboard-tiempo-real", "Una tarjeta por sensor, en vivo."),
-            hueco("Histórico", "feature/dashboard-graficas", "Gráficas con filtro desde / hasta."),
-            hueco("Alertas activas", "feature/alertas-pagina"),
-            hueco("Consejo de riego", "feature/insights", "Predicción a 24 h."),
-            class_name="dm-rejilla",
-        ),
+        prototipo.contenido("panel", "app has-tabs p-panel", scripts=("twin.js", "app.js", "mascota.js")),
         activa="/dashboard",
     )

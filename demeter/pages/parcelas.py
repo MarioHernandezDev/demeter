@@ -1,19 +1,20 @@
-"""``/parcelas``: listado de parcelas y sus sensores."""
+"""``/parcelas``: maqueta del prototipo dentro de ``layout()`` (C2, issue #29).
+
+Requiere sesión. El contenido es la plantilla ``plantillas/parcelas.html`` con datos de
+ejemplo; la rama de esta pantalla la sustituye por componentes con datos de la API
+(ver ``demeter/components/prototipo.py``).
+"""
 
 import reflex as rx
 
-from demeter.components.layout import cabecera, hueco, layout
+from demeter.components import prototipo
+from demeter.components.layout import layout
 from demeter.state.auth import AuthState
 
 
 @rx.page(route="/parcelas", title="Parcelas · Demeter", on_load=AuthState.require_login)
 def parcelas() -> rx.Component:
     return layout(
-        cabecera("Parcelas", "Tus fincas, sus sensores y dónde está cada uno."),
-        rx.el.div(
-            hueco("Listado de parcelas", "feature/ui-parcelas"),
-            hueco("Mapa y gemelo 3D", "feature/ui-mapa"),
-            class_name="dm-rejilla",
-        ),
+        prototipo.contenido("parcelas", "app has-tabs p-parcelas", scripts=("app.js", "mascota.js")),
         activa="/parcelas",
     )

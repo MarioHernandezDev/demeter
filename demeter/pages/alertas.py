@@ -1,19 +1,20 @@
-"""``/alertas``: alertas abiertas y su historial."""
+"""``/alertas``: maqueta del prototipo dentro de ``layout()`` (C2, issue #29).
+
+Requiere sesión. El contenido es la plantilla ``plantillas/alertas.html`` con datos de
+ejemplo; la rama de esta pantalla la sustituye por componentes con datos de la API
+(ver ``demeter/components/prototipo.py``).
+"""
 
 import reflex as rx
 
-from demeter.components.layout import cabecera, hueco, layout
+from demeter.components import prototipo
+from demeter.components.layout import layout
 from demeter.state.auth import AuthState
 
 
 @rx.page(route="/alertas", title="Alertas · Demeter", on_load=AuthState.require_login)
 def alertas() -> rx.Component:
     return layout(
-        cabecera("Alertas", "Valores fuera de umbral, de la más reciente a la más antigua."),
-        rx.el.div(
-            hueco("Alertas abiertas e historial", "feature/alertas-pagina"),
-            hueco("Avisos fuera de la app", "feature/alertas-notificaciones"),
-            class_name="dm-rejilla",
-        ),
+        prototipo.contenido("alertas", "app has-tabs p-alertas", scripts=("app.js", "mascota.js")),
         activa="/alertas",
     )
