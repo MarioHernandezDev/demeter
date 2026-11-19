@@ -1,2 +1,14 @@
+.states
+*.py[cod]
+.web
 __pycache__/
 *.pyc
+
+# Reflex
+.web/
+.states/
+assets/external/
+*.db
+.venv/
+.pytest_cache/
+reflex.lock/
