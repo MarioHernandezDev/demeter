@@ -1,14 +1,29 @@
-.states
-*.py[cod]
-.web
+# Python
 __pycache__/
-*.pyc
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.coverage
+htmlcov/
 
-# Reflex
+# Reflex (se regeneran al arrancar)
 .web/
 .states/
 assets/external/
-*.db
-.venv/
-.pytest_cache/
 reflex.lock/
+
+# Bases de datos locales (la de demo se genera con el seed, B8)
+*.db
+*.db-journal
+
+# Secretos: se copia .env.example a .env y no se sube nunca
+.env
+.env.*
+!.env.example
+
+# Editores y sistema
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
