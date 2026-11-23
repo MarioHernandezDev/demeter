@@ -20,6 +20,9 @@
   #view canvas { display: block; }
   #info { position: absolute; left: 10px; top: 10px; background: #000b; padding: 8px 10px; border-radius: 6px; font-size: 12px; max-width: 320px; line-height: 1.45; pointer-events: none; }
   #status { font-size: 12px; color: #b0bec5; }
+  .sep { width: 1px; height: 22px; background: #3a444d; }
+  #edit { position: absolute; right: 10px; top: 10px; background: #000d; padding: 10px; border-radius: 6px; font-size: 13px; line-height: 1.6; }
+  #edit button { padding: 3px 9px; margin-right: 4px; }
   .hint { position: absolute; z-index: 999; left: 50%; transform: translateX(-50%); bottom: 12px; background: #000c; padding: 6px 10px; border-radius: 6px; font-size: 12px; }
 </style>
 <script type="importmap">
@@ -33,17 +36,26 @@
 <header>
   <h1>Demeter · Gemelo digital (demo)</h1>
   <button id="bParcela">1 · Dibujar mi terreno</button>
-  <button id="bBancal" class="sec">2 · Dibujar borde de bancal</button>
-  <button id="bBorrar" class="sec">Borrar bancales</button>
-  <button id="bGenerar">3 · Generar gemelo 3D</button>
-  <button id="bModo" class="sec" disabled>Ver: bancales reconstruidos</button>
+  <button id="bGenerar">2 · Generar 3D</button>
+  <span class="sep"></span>
+  <label>Muro <input id="muro" type="range" min="0.5" max="3" step="0.25" value="1.5"><span id="muroV">1,5 m</span></label>
+  <label><input id="talud" type="checkbox"> Talud de tierra</label>
+  <button id="bTodo" class="sec" disabled>Bancalizar todo</button>
+  <button id="bZona" class="sec" disabled>Bancalizar zona</button>
+  <button id="bLiso" class="sec" disabled>Zona lisa</button>
+  <button id="bDeshacer" class="sec" disabled>Deshacer</button>
+  <span class="sep"></span>
+  <button id="bModo" class="sec" disabled>Ver: gemelo</button>
   <button id="bTex" class="sec" disabled>Textura: ortofoto</button>
   <label>Exageración <input id="exag" type="range" min="1" max="3" step="0.25" value="1"><span id="exagV">1×</span></label>
   <span id="status">Dibuja el contorno de tu terreno sobre la ortofoto PNOA.</span>
 </header>
 <main>
-  <div id="map"><div class="hint">Bancales: dibuja una línea por el borde de cada muro, cruzando el terreno de lado a lado.</div></div>
-  <div id="view"><div id="info">Aún no hay gemelo generado.</div></div>
+  <div id="map"></div>
+  <div id="view">
+    <div id="info">Aún no hay gemelo generado.</div>
+    <div id="edit" hidden></div>
+  </div>
 </main>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -55,6 +67,10 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 // ---------- Proyección: todo el cálculo se hace en ETRS89 / UTM 30N (EPSG:25830) ----------
 proj4.defs('EPSG:25830', '+proj=utm +zone=30 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs');
 const toUTM = ll => proj4('EPSG:4326', 'EPSG:25830', [ll.lng, ll.lat]);
+const $ = id => document.getElementById(id);
+const fmt = n => Math.round(n).toLocaleString('es-ES');
+const fm = n => n.toFixed(2).replace('.', ',');
+const status = t => $('status').textContent = t;
 
 // ---------- Mapa 2D ----------
 const map = L.map('map').setView([36.7585, -3.5300], 16);
@@ -65,54 +81,48 @@ const catastro = L.tileLayer.wms('https://ovc.catastro.meh.es/Cartografia/WMS/Se
   layers: 'Catastro', format: 'image/png', transparent: true, maxZoom: 20, attribution: '© Dirección General del Catastro' });
 L.control.layers({ 'Ortofoto PNOA': pnoa, 'OpenStreetMap': osm }, { 'Lindes del Catastro': catastro }).addTo(map);
 L.control.scale({ imperial: false }).addTo(map);
-
 const parcelaLayer = new L.FeatureGroup().addTo(map);
-const bancalLayer = new L.FeatureGroup().addTo(map);
-const status = t => document.getElementById('status').textContent = t;
+const zonasLayer = new L.FeatureGroup().addTo(map);
 
-// Dibujo propio: clic = añadir vértice · doble clic, Enter o clic en el primer vértice = terminar · Esc = cancelar
-let mode = null, pts = [], temp = null;
-const COL = { parcela: '#9ccc65', bancal: '#ffb300' };
+// ---------- Dibujo: clic = vértice · doble clic / Enter / clic en el primero / volver a pulsar el botón = cerrar · Esc = cancelar ----------
+const DRAW = { parcela: { btn: 'bParcela', color: '#9ccc65' }, bancal: { btn: 'bZona', color: '#ffb300' }, liso: { btn: 'bLiso', color: '#4fc3f7' } };
+let mode = null, pts = [], temp = null, lastClick = 0;
 function startDraw(kind) {
-  cancelDraw(); mode = kind; pts = [];
+  cancelDraw(); mode = kind;
   map.doubleClickZoom.disable(); map.getContainer().style.cursor = 'crosshair';
-  document.getElementById(kind === 'parcela' ? 'bParcela' : 'bBancal').classList.add('on');
-  status(kind === 'parcela' ? 'Clic para añadir vértices; doble clic o clic en el primero para cerrar.' : 'Clic a lo largo del borde del muro; doble clic para terminar.');
+  $(DRAW[kind].btn).classList.add('on');
+  status('Clic para añadir vértices; doble clic o clic en el primero para cerrar. Esc cancela.');
 }
 function cancelDraw() {
   if (temp) map.removeLayer(temp); temp = null; mode = null; pts = [];
   map.doubleClickZoom.enable(); map.getContainer().style.cursor = '';
-  ['bParcela', 'bBancal'].forEach(id => document.getElementById(id).classList.remove('on'));
+  Object.values(DRAW).forEach(d => $(d.btn).classList.remove('on'));
 }
 function finishDraw() {
   const kind = mode, ll = pts.slice(); cancelDraw();
-  if (kind === 'parcela' && ll.length >= 3) {
-    parcelaLayer.clearLayers(); parcelaLayer.addLayer(L.polygon(ll, { color: COL.parcela, weight: 3, fillOpacity: .08 }));
-    status(`Terreno dibujado: ${fmt(areaUTM(ll.map(toUTM)))} m². Ahora dibuja los bordes de bancal (opcional) y genera el 3D.`);
-  } else if (kind === 'bancal' && ll.length >= 2) {
-    bancalLayer.addLayer(L.polyline(ll, { color: COL.bancal, weight: 3 }));
-    status(`${bancalLayer.getLayers().length} borde(s) de bancal dibujados.`);
-  }
+  if (ll.length < 3) return;
+  if (kind === 'parcela') {
+    parcelaLayer.clearLayers(); zonasLayer.clearLayers();
+    parcelaLayer.addLayer(L.polygon(ll, { color: DRAW.parcela.color, weight: 3, fillOpacity: .06 }));
+    status(`Terreno dibujado: ${fmt(areaUTM(ll.map(toUTM)))} m². Pulsa «Generar 3D».`);
+  } else addZona(kind, ll);
 }
-let lastClick = 0;
 map.on('click', e => {
   if (!mode) return;
   const now = Date.now(), dbl = now - lastClick < 350 && pts.length && map.latLngToContainerPoint(pts[pts.length - 1]).distanceTo(e.containerPoint) < 8;
   lastClick = now;
   if (dbl) return finishDraw();
-  if (mode === 'parcela' && pts.length >= 3 && map.latLngToContainerPoint(pts[0]).distanceTo(e.containerPoint) < 12) return finishDraw();
+  if (pts.length >= 3 && map.latLngToContainerPoint(pts[0]).distanceTo(e.containerPoint) < 12) return finishDraw();
   pts.push(e.latlng);
   if (temp) map.removeLayer(temp);
-  temp = (mode === 'parcela' && pts.length >= 3 ? L.polygon(pts, { color: COL.parcela, dashArray: '5 5', fillOpacity: .05 }) : L.polyline(pts, { color: COL[mode], dashArray: '5 5' })).addTo(map);
+  const c = DRAW[mode].color;
+  temp = (pts.length >= 3 ? L.polygon(pts, { color: c, dashArray: '5 5', fillOpacity: .05 }) : L.polyline(pts, { color: c, dashArray: '5 5' })).addTo(map);
 });
 map.on('dblclick', () => { if (mode) finishDraw(); });
 addEventListener('keydown', e => { if (!mode) return; if (e.key === 'Enter') finishDraw(); if (e.key === 'Escape') cancelDraw(); });
-document.getElementById('bParcela').onclick = () => mode === 'parcela' ? finishDraw() : startDraw('parcela');
-document.getElementById('bBancal').onclick = () => mode === 'bancal' ? finishDraw() : startDraw('bancal');
-document.getElementById('bBorrar').onclick = () => { bancalLayer.clearLayers(); status('Bancales borrados.'); };
+for (const k of Object.keys(DRAW)) $(DRAW[k].btn).onclick = () => mode === k ? finishDraw() : startDraw(k);
 
 // ---------- Geometría ----------
-const fmt = n => Math.round(n).toLocaleString('es-ES');
 function areaUTM(p) { let a = 0; for (let i = 0; i < p.length; i++) { const [x1, y1] = p[i], [x2, y2] = p[(i + 1) % p.length]; a += x1 * y2 - x2 * y1; } return Math.abs(a) / 2; }
 function inside(x, y, p) { let c = false; for (let i = 0, j = p.length - 1; i < p.length; j = i++) { const [xi, yi] = p[i], [xj, yj] = p[j]; if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) c = !c; } return c; }
 
@@ -120,10 +130,9 @@ function inside(x, y, p) { let c = false; for (let i = 0, j = p.length - 1; i < 
 async function fetchMDT(x0, y0, x1, y1) {
   const url = `https://servicios.idee.es/wcs-inspire/mdt?SERVICE=WCS&VERSION=2.0.1&REQUEST=GetCoverage&CoverageId=Elevacion25830_5&SUBSET=x(${x0},${x1})&SUBSET=y(${y0},${y1})&FORMAT=application/asc`;
   const txt = await (await fetch(url)).text();
-  const body = txt.slice(txt.indexOf('ncols'));
-  const tok = body.split(/\s+/);
+  const tok = txt.slice(txt.indexOf('ncols')).split(/\s+/);
   const hdr = {}; let i = 0;
-  while (isNaN(parseFloat(tok[i + 1])) === false && /[a-z]/i.test(tok[i])) { hdr[tok[i].toLowerCase()] = parseFloat(tok[i + 1]); i += 2; }
+  while (/[a-z]/i.test(tok[i]) && !isNaN(parseFloat(tok[i + 1]))) { hdr[tok[i].toLowerCase()] = parseFloat(tok[i + 1]); i += 2; }
   const n = hdr.ncols * hdr.nrows, z = new Float32Array(n);
   for (let k = 0; k < n; k++) z[k] = parseFloat(tok[i + k]);
   return { ...hdr, z }; // fila 0 = norte
@@ -138,57 +147,117 @@ function sampler(m) {
     return (a * (1 - fc) + b * fc) * (1 - fr) + (d * (1 - fc) + e * fc) * fr;
   };
 }
+function boxBlur(src, nx, ny, rad, passes) {
+  let a = Float32Array.from(src), b = new Float32Array(a.length);
+  for (let p = 0; p < passes; p++) {
+    for (let r = 0; r < ny; r++) for (let c = 0; c < nx; c++) { let s = 0, n = 0; for (let k = -rad; k <= rad; k++) { const cc = c + k; if (cc >= 0 && cc < nx) { s += a[r * nx + cc]; n++; } } b[r * nx + c] = s / n; }
+    for (let r = 0; r < ny; r++) for (let c = 0; c < nx; c++) { let s = 0, n = 0; for (let k = -rad; k <= rad; k++) { const rr = r + k; if (rr >= 0 && rr < ny) { s += b[rr * nx + c]; n++; } } a[r * nx + c] = s / n; }
+  }
+  return a;
+}
+const N4 = [[1, 0], [-1, 0], [0, 1], [0, -1]];
 
-// ---------- Reconstrucción de bancales ----------
-// Las líneas dibujadas (bordes de muro) parten el terreno en regiones; cada región se
-// aplana a la mediana de su altura MDT y los muros quedan verticales en la línea dibujada.
-function reconstruir(G, lines) {
-  const { nx, ny, res, x0, y1, raw, mask } = G;
-  const barrier = new Uint8Array(nx * ny);
-  for (const ln of lines) {
-    const pts = ln.slice();
-    // prolonga 4 m cada extremo para que corte bien el contorno
-    const ext = (a, b) => { const dx = a[0] - b[0], dy = a[1] - b[1], L0 = Math.hypot(dx, dy) || 1; return [a[0] + dx / L0 * 4, a[1] + dy / L0 * 4]; };
-    pts.unshift(ext(pts[0], pts[1])); pts.push(ext(pts[pts.length - 1], pts[pts.length - 2]));
-    for (let k = 0; k < pts.length - 1; k++) {
-      const [ax, ay] = pts[k], [bx, by] = pts[k + 1], steps = Math.ceil(Math.hypot(bx - ax, by - ay) / (res * .3));
-      for (let s = 0; s <= steps; s++) {
-        const x = ax + (bx - ax) * s / steps, y = ay + (by - ay) * s / steps;
-        const c = Math.round((x - x0) / res), r = Math.round((y1 - y) / res);
-        if (c >= 0 && c < nx && r >= 0 && r < ny) barrier[r * nx + c] = 1;
-      }
-    }
-  }
-  const label = new Int32Array(nx * ny).fill(-1), regions = [];
-  for (let start = 0; start < nx * ny; start++) {
-    if (!mask[start] || barrier[start] || label[start] >= 0) continue;
-    const id = regions.length, cells = [start]; label[start] = id;
-    for (let q = 0; q < cells.length; q++) {
-      const i = cells[q], c = i % nx, r = (i / nx) | 0;
-      for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+// ---------- Bancalizado ----------
+// Zona → relieve suavizado → escalones de altura fija (los muros siguen las curvas de nivel)
+// → limpieza (filtro de mayoría + fusión de plataformas pequeñas). Ningún muro supera la altura elegida.
+function nivelesZona(zone, Zm) {
+  const { nx, ny, res } = G, step = zone.step, lev = new Int32Array(nx * ny);
+  for (const i of zone.cells) lev[i] = Math.round(G.smooth[i] / step);
+  for (let pass = 0; pass < 2; pass++) {               // filtro de mayoría 3×3: bordes limpios
+    const out = Int32Array.from(lev);
+    for (const i of zone.cells) {
+      const c = i % nx, r = (i / nx) | 0, cnt = new Map();
+      for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
         const cc = c + dc, rr = r + dr; if (cc < 0 || rr < 0 || cc >= nx || rr >= ny) continue;
-        const j = rr * nx + cc; if (mask[j] && !barrier[j] && label[j] < 0) { label[j] = id; cells.push(j); }
+        const j = rr * nx + cc; if (Zm[j]) cnt.set(lev[j], (cnt.get(lev[j]) || 0) + 1);
       }
+      let best = lev[i], bn = 0; for (const [k, v] of cnt) if (v > bn) { bn = v; best = k; }
+      if (bn >= 5) out[i] = best;
     }
-    const hs = cells.map(i => raw[i]).sort((a, b) => a - b);
-    regions.push({ cells, h: hs[hs.length >> 1], area: cells.length * res * res });
+    for (const i of zone.cells) lev[i] = out[i];
   }
-  const out = Float32Array.from(raw);
-  for (const R of regions) if (R.area >= 15) for (const i of R.cells) out[i] = R.h;
-  // celdas de muro: toman la altura del bancal superior vecino → muro vertical
-  for (let i = 0; i < nx * ny; i++) if (barrier[i] && mask[i]) {
-    const c = i % nx, r = (i / nx) | 0; let best = -Infinity;
-    for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1], [2, 0], [-2, 0], [0, 2], [0, -2]]) {
-      const cc = c + dc, rr = r + dr; if (cc < 0 || rr < 0 || cc >= nx || rr >= ny) continue;
-      const l = label[rr * nx + cc]; if (l >= 0 && regions[l].area >= 15) best = Math.max(best, regions[l].h);
+  const minCells = Math.max(4, Math.round(12 / (res * res)));  // plataformas < 12 m² se funden con la vecina
+  for (let it = 0; it < 3; it++) {
+    const lab = new Uint8Array(nx * ny); let changed = false;
+    for (const s0 of zone.cells) {
+      if (lab[s0]) continue;
+      const cells = [s0]; lab[s0] = 1;
+      for (let q = 0; q < cells.length; q++) { const i = cells[q], c = i % nx, r = (i / nx) | 0;
+        for (const [dc, dr] of N4) { const cc = c + dc, rr = r + dr; if (cc < 0 || rr < 0 || cc >= nx || rr >= ny) continue;
+          const j = rr * nx + cc; if (Zm[j] && !lab[j] && lev[j] === lev[i]) { lab[j] = 1; cells.push(j); } } }
+      if (cells.length >= minCells) continue;
+      const cnt = new Map();
+      for (const i of cells) { const c = i % nx, r = (i / nx) | 0;
+        for (const [dc, dr] of N4) { const cc = c + dc, rr = r + dr; if (cc < 0 || rr < 0 || cc >= nx || rr >= ny) continue;
+          const j = rr * nx + cc; if (Zm[j] && lev[j] !== lev[i]) cnt.set(lev[j], (cnt.get(lev[j]) || 0) + 1); } }
+      let best = null, bn = 0; for (const [k, v] of cnt) if (v > bn) { bn = v; best = k; }
+      if (best !== null) { for (const i of cells) lev[i] = best; changed = true; }
     }
-    if (best > -Infinity) out[i] = best;
+    if (!changed) break;
   }
-  return { z: out, regions: regions.filter(R => R.area >= 15).sort((a, b) => b.h - a.h) };
+  return lev;
+}
+
+function recompute() {
+  const { nx, ny, raw } = G;
+  const z = Float32Array.from(raw), label = new Int32Array(nx * ny).fill(-1), comps = [];
+  const taludMask = new Uint8Array(nx * ny);
+  for (const zone of G.zonas) {
+    const Zm = new Uint8Array(nx * ny); for (const i of zone.cells) Zm[i] = 1;
+    if (zone.type === 'liso') {
+      const hs = zone.cells.map(i => raw[i]).sort((a, b) => a - b);
+      const id = comps.length; comps.push({ h: hs[hs.length >> 1], type: 'liso' });
+      for (const i of zone.cells) label[i] = id;
+    } else {
+      const lev = nivelesZona(zone, Zm), seen = new Uint8Array(nx * ny);
+      for (const s0 of zone.cells) {
+        if (seen[s0]) continue;
+        const id = comps.length, cells = [s0]; seen[s0] = 1;
+        for (let q = 0; q < cells.length; q++) { const i = cells[q], c = i % nx, r = (i / nx) | 0;
+          for (const [dc, dr] of N4) { const cc = c + dc, rr = r + dr; if (cc < 0 || rr < 0 || cc >= nx || rr >= ny) continue;
+            const j = rr * nx + cc; if (Zm[j] && !seen[j] && lev[j] === lev[i]) { seen[j] = 1; cells.push(j); } } }
+        comps.push({ h: lev[s0] * zone.step, type: 'bancal' });
+        for (const i of cells) label[i] = id;
+      }
+      if (zone.talud) for (const i of zone.cells) taludMask[i] = 1;
+    }
+  }
+  comps.forEach((C, id) => { C.h += G.offsets.get(id) || 0; C.cells = 0; });
+  for (let i = 0; i < nx * ny; i++) if (label[i] >= 0) { z[i] = comps[label[i]].h; comps[label[i]].cells++; }
+  if (taludMask.some(v => v)) {                           // talud de tierra: suaviza solo junto a los muros
+    const bl = boxBlur(z, nx, ny, 1, 2);
+    for (let i = 0; i < nx * ny; i++) if (taludMask[i]) {
+      const c = i % nx, r = (i / nx) | 0;
+      let wall = false; for (const [dc, dr] of N4) { const cc = c + dc, rr = r + dr; if (cc >= 0 && rr >= 0 && cc < nx && rr < ny && label[rr * nx + cc] !== label[i]) wall = true; }
+      if (wall) z[i] = bl[i];
+    }
+  }
+  G.z = z; G.label = label; G.comps = comps;
+}
+
+function addZona(type, ll) {
+  if (!G) return status('Primero genera el 3D.');
+  const P = ll.map(toUTM), cells = [];
+  for (let r = 0; r < G.ny; r++) for (let c = 0; c < G.nx; c++) {
+    const i = r * G.nx + c; if (G.mask[i] && inside(G.x0 + c * G.res, G.y1 - r * G.res, P)) cells.push(i);
+  }
+  if (!cells.length) return status('La zona no cae dentro de tu terreno.');
+  const layer = L.polygon(ll, { color: DRAW[type].color, weight: 2, fillOpacity: .12 }).addTo(zonasLayer);
+  G.zonas.push({ type, cells, layer, step: +$('muro').value, talud: $('talud').checked });
+  refresh();
+}
+function refresh() {
+  recompute();
+  for (const k of [...G.offsets.keys()]) if (k >= G.comps.length) G.offsets.delete(k);
+  G.sel = null; showGemelo = true; $('bModo').textContent = 'Ver: gemelo';
+  $('bDeshacer').disabled = !G.zonas.length;
+  buildMesh(); infoText(); editPanel();
+  const nb = G.comps.filter(c => c.type === 'bancal').length;
+  status(G.zonas.length ? `${nb} bancales. Haz clic en uno en el 3D para subirlo o bajarlo.` : 'Relieve real. Elige la altura de muro y pulsa «Bancalizar todo» o «Bancalizar zona».');
 }
 
 // ---------- Vista 3D ----------
-const view = document.getElementById('view'), info = document.getElementById('info');
+const view = $('view'), info = $('info'), edit = $('edit');
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(devicePixelRatio); view.appendChild(renderer.domElement);
 const scene = new THREE.Scene(); scene.background = new THREE.Color(0xa9c9e8);
@@ -200,12 +269,12 @@ function resize() { const w = view.clientWidth, h = view.clientHeight; renderer.
 addEventListener('resize', resize); resize();
 (function loop() { requestAnimationFrame(loop); controls.update(); renderer.render(scene, camera); })();
 
-let G = null, mesh = null, showBancales = true, useOrtho = true, orthoTex = null;
+let G = null, mesh = null, showGemelo = true, useOrtho = true, orthoTex = null;
 
 function buildMesh() {
   if (mesh) { scene.remove(mesh); mesh.geometry.dispose(); mesh.material.dispose(); }
-  const { nx, ny, res, mask, raw, rec, hmin } = G;
-  const Z = showBancales && rec ? rec.z : raw, ex = +document.getElementById('exag').value;
+  const { nx, ny, res, mask, raw, hmin } = G;
+  const Z = showGemelo ? G.z : raw, ex = +$('exag').value, sel = showGemelo ? G.sel : null;
   const geo = new THREE.PlaneGeometry((nx - 1) * res, (ny - 1) * res, nx - 1, ny - 1);
   geo.rotateX(-Math.PI / 2);
   const pos = geo.attributes.position, col = new Float32Array(nx * ny * 3);
@@ -215,31 +284,58 @@ function buildMesh() {
   for (let i = 0; i < nx * ny; i++) {
     let r, g, b;
     if (useOrtho) { r = g = b = 1; }
-    else { const s = nrm.getY(i); // pendiente: plano = cultivo, inclinado = muro/talud
-      if (s > .93) [r, g, b] = [.47, .62, .30]; else if (s > .75) [r, g, b] = [.62, .52, .36]; else [r, g, b] = [.62, .6, .56]; }
+    else { const s = nrm.getY(i);  // plano = cultivo · inclinado = talud · casi vertical = muro
+      if (s > .93) [r, g, b] = [.47, .62, .30]; else if (s > .6) [r, g, b] = [.62, .52, .36]; else [r, g, b] = [.66, .64, .6]; }
+    if (sel !== null && G.label[i] === sel) [r, g, b] = [r * .6 + .4, g * .6 + .36, b * .3];
     const k = mask[i] ? 1 : .38; col.set([r * k, g * k, b * k], i * 3);
   }
   geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
-  const mat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: !useOrtho, map: useOrtho ? orthoTex : null });
   const g2 = useOrtho ? geo : geo.toNonIndexed();
   if (!useOrtho) g2.computeVertexNormals();
-  mesh = new THREE.Mesh(g2, mat); scene.add(mesh);
+  mesh = new THREE.Mesh(g2, new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: !useOrtho, map: useOrtho ? orthoTex : null }));
+  scene.add(mesh);
 }
 
 function infoText() {
-  const { area, raw, mask, nx, ny, hmin, hmax, rec, mdtRes } = G;
-  let t = `<b>Terreno propio</b>: ${fmt(area)} m² (${(area / 1e4).toFixed(2)} ha)<br>Altitud: ${hmin.toFixed(1)} – ${hmax.toFixed(1)} m<br>Fuente relieve: MDT IGN ${mdtRes} m (WCS)<br>`;
-  if (rec && rec.regions.length) {
-    t += `<b>Bancales reconstruidos: ${rec.regions.length}</b><br>`;
-    rec.regions.slice(0, 12).forEach((R, k) => {
-      const next = rec.regions[k + 1];
-      t += `· ${R.h.toFixed(1)} m · ${fmt(R.area)} m²${next ? ` · desnivel con el siguiente ≈ ${(R.h - next.h).toFixed(1)} m` : ''}<br>`;
-    });
-  } else t += 'Sin bordes de bancal: se muestra el relieve tal cual.';
+  const { area, hmin, hmax, mdtRes, comps, res } = G;
+  const b = comps.filter(c => c.type === 'bancal'), l = comps.filter(c => c.type === 'liso');
+  let t = `<b>Terreno propio</b>: ${fmt(area)} m² (${(area / 1e4).toFixed(2).replace('.', ',')} ha)<br>Altitud real: ${hmin.toFixed(1)} – ${hmax.toFixed(1)} m · relieve MDT IGN ${mdtRes} m<br>`;
+  if (b.length) t += `<b>${b.length} bancales</b> · superficie media ${fmt(b.reduce((s, c) => s + c.cells, 0) * res * res / b.length)} m²<br>`;
+  if (l.length) t += `<b>${l.length} zona(s) lisa(s)</b><br>`;
+  if (!G.zonas.length) t += 'Sin bancalizar: relieve real del IGN.';
   info.innerHTML = t;
 }
 
-document.getElementById('bGenerar').onclick = async () => {
+function editPanel() {
+  if (G.sel === null) { edit.hidden = true; return; }
+  const C = G.comps[G.sel], off = G.offsets.get(G.sel) || 0;
+  edit.hidden = false;
+  edit.innerHTML = `<b>${C.type === 'liso' ? 'Zona lisa' : 'Bancal'}</b><br>Altura: ${fm(C.h)} m${off ? ` (${off > 0 ? '+' : ''}${fm(off)} m)` : ''}<br>Superficie: ${fmt(C.cells * G.res * G.res)} m²<br>
+    <button id="eUp">▲ +0,25 m</button><button id="eDn">▼ −0,25 m</button><br>
+    <button id="eReset" class="sec">Restablecer</button><button id="eClose" class="sec">Cerrar</button>`;
+  const set = d => { G.offsets.set(G.sel, d); const s = G.sel; recompute(); G.sel = s; buildMesh(); infoText(); editPanel(); };
+  $('eUp').onclick = () => set(off + .25);
+  $('eDn').onclick = () => set(off - .25);
+  $('eReset').onclick = () => set(0);
+  $('eClose').onclick = () => { G.sel = null; buildMesh(); editPanel(); };
+}
+
+// clic (sin arrastrar) en el 3D → seleccionar bancal
+const ray = new THREE.Raycaster(); let downAt = null;
+renderer.domElement.addEventListener('pointerdown', e => downAt = [e.clientX, e.clientY]);
+renderer.domElement.addEventListener('pointerup', e => {
+  if (!G || !mesh || !showGemelo || !downAt || Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 4) return;
+  const rect = renderer.domElement.getBoundingClientRect();
+  ray.setFromCamera(new THREE.Vector2((e.clientX - rect.left) / rect.width * 2 - 1, -(e.clientY - rect.top) / rect.height * 2 + 1), camera);
+  const hit = ray.intersectObject(mesh)[0];
+  if (!hit) return;
+  const W = (G.nx - 1) * G.res, H = (G.ny - 1) * G.res;
+  const c = Math.round((hit.point.x + W / 2) / G.res), r = Math.round((hit.point.z + H / 2) / G.res);
+  const id = G.label[r * G.nx + c];
+  G.sel = id >= 0 ? id : null; buildMesh(); editPanel();
+});
+
+$('bGenerar').onclick = async () => {
   if (mode) finishDraw();
   const poly = parcelaLayer.getLayers()[0];
   if (!poly) return status('Primero dibuja tu terreno.');
@@ -252,8 +348,7 @@ document.getElementById('bGenerar').onclick = async () => {
   try {
     const W = x1 - x0, H = y1 - y0, px = Math.min(2048, Math.round(Math.max(W, H) * 4));
     const orthoUrl = `https://www.ign.es/wms-inspire/pnoa-ma?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=OI.OrthoimageCoverage&STYLES=&CRS=EPSG:25830&BBOX=${x0},${y0},${x1},${y1}&WIDTH=${Math.round(px * W / Math.max(W, H))}&HEIGHT=${Math.round(px * H / Math.max(W, H))}&FORMAT=image/jpeg`;
-    const [mdt, tex] = await Promise.all([fetchMDT(x0, y0, x1, y1),
-      new THREE.TextureLoader().setCrossOrigin('anonymous').loadAsync(orthoUrl)]);
+    const [mdt, tex] = await Promise.all([fetchMDT(x0, y0, x1, y1), new THREE.TextureLoader().setCrossOrigin('anonymous').loadAsync(orthoUrl)]);
     tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 8; orthoTex = tex;
     const res = Math.max(W, H) > 700 ? 2 : 1, nx = Math.round(W / res) + 1, ny = Math.round(H / res) + 1;
     const s = sampler(mdt), raw = new Float32Array(nx * ny), mask = new Uint8Array(nx * ny);
@@ -263,23 +358,27 @@ document.getElementById('bGenerar').onclick = async () => {
       raw[i] = s(x, y); mask[i] = inside(x, y, P) ? 1 : 0;
       if (mask[i]) { hmin = Math.min(hmin, raw[i]); hmax = Math.max(hmax, raw[i]); }
     }
-    G = { nx, ny, res, x0, y1, raw, mask, hmin, hmax, area: areaUTM(P), mdtRes: mdt.cellsize };
-    const lines = bancalLayer.getLayers().map(l => l.getLatLngs().map(toUTM));
-    G.rec = lines.length ? reconstruir(G, lines) : null;
-    showBancales = !!G.rec;
-    buildMesh(); infoText();
+    G = { nx, ny, res, x0, y1, raw, mask, hmin, hmax, area: areaUTM(P), mdtRes: mdt.cellsize,
+          smooth: boxBlur(raw, nx, ny, Math.round(4 / res), 3), zonas: [], offsets: new Map(), comps: null, sel: null };
+    zonasLayer.clearLayers();
+    ['bModo', 'bTex', 'bTodo', 'bZona', 'bLiso'].forEach(id => $(id).disabled = false);
+    refresh();
     const span = Math.max(W, H);
     controls.target.set(0, (hmax - hmin) / 2, 0);
-    camera.position.set(span * .35, span * .7 + (hmax - hmin), span * .85);
-    ['bModo', 'bTex'].forEach(id => document.getElementById(id).disabled = false);
-    document.getElementById('bModo').disabled = !G.rec;
-    document.getElementById('bModo').textContent = showBancales ? 'Ver: bancales reconstruidos' : 'Ver: MDT bruto';
-    status('Gemelo generado. Arrastra para girar, rueda para zoom.');
+    camera.position.set(span * .35, span * .55 + (hmax - hmin), span * .85);
   } catch (err) { console.error(err); status('Error descargando datos del IGN: ' + err.message); }
 };
-document.getElementById('bModo').onclick = e => { showBancales = !showBancales; e.target.textContent = showBancales ? 'Ver: bancales reconstruidos' : 'Ver: MDT bruto'; buildMesh(); };
-document.getElementById('bTex').onclick = e => { useOrtho = !useOrtho; e.target.textContent = useOrtho ? 'Textura: ortofoto' : 'Textura: low-poly'; buildMesh(); };
-document.getElementById('exag').oninput = e => { document.getElementById('exagV').textContent = e.target.value + '×'; if (G) buildMesh(); };
+$('bTodo').onclick = () => {
+  if (!G) return;
+  const cells = []; for (let i = 0; i < G.nx * G.ny; i++) if (G.mask[i]) cells.push(i);
+  G.zonas.push({ type: 'bancal', cells, layer: null, step: +$('muro').value, talud: $('talud').checked });
+  refresh();
+};
+$('bDeshacer').onclick = () => { const z = G && G.zonas.pop(); if (!z) return; if (z.layer) zonasLayer.removeLayer(z.layer); refresh(); };
+$('bModo').onclick = e => { showGemelo = !showGemelo; e.target.textContent = showGemelo ? 'Ver: gemelo' : 'Ver: MDT bruto'; buildMesh(); };
+$('bTex').onclick = e => { useOrtho = !useOrtho; e.target.textContent = useOrtho ? 'Textura: ortofoto' : 'Textura: low-poly'; buildMesh(); };
+$('exag').oninput = e => { $('exagV').textContent = e.target.value + '×'; if (G) buildMesh(); };
+$('muro').oninput = e => $('muroV').textContent = (+e.target.value).toString().replace('.', ',') + ' m';
 </script>
 </body>
 </html>
