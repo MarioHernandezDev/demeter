@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Demeter · Demo gemelo digital (PNOA + MDT IGN)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px system-ui, sans-serif; background: #14181c; color: #e6e6e6; height: 100vh; display: flex; flex-direction: column; }
+  header { padding: 8px 14px; background: #1d2329; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; border-bottom: 1px solid #2c343c; }
+  header h1 { font-size: 15px; margin: 0 10px 0 0; color: #9ccc65; }
+  button { background: #2e7d32; color: #fff; border: 0; padding: 6px 10px; border-radius: 5px; cursor: pointer; font-size: 13px; }
+  button.sec { background: #37474f; }
+  button.on { outline: 2px solid #9ccc65; }
+  button:disabled { opacity: .4; cursor: default; }
+  label { font-size: 13px; display: flex; gap: 5px; align-items: center; }
+  main { flex: 1; display: flex; min-height: 0; }
+  #map, #view { flex: 1; position: relative; }
+  #view canvas { display: block; }
+  #info { position: absolute; left: 10px; top: 10px; background: #000b; padding: 8px 10px; border-radius: 6px; font-size: 12px; max-width: 320px; line-height: 1.45; pointer-events: none; }
+  #status { font-size: 12px; color: #b0bec5; }
+  .hint { position: absolute; z-index: 999; left: 50%; transform: translateX(-50%); bottom: 12px; background: #000c; padding: 6px 10px; border-radius: 6px; font-size: 12px; }
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<header>
+  <h1>Demeter · Gemelo digital (demo)</h1>
+  <button id="bParcela">1 · Dibujar mi terreno</button>
+  <button id="bBancal" class="sec">2 · Dibujar borde de bancal</button>
+  <button id="bBorrar" class="sec">Borrar bancales</button>
+  <button id="bGenerar">3 · Generar gemelo 3D</button>
+  <button id="bModo" class="sec" disabled>Ver: bancales reconstruidos</button>
+  <button id="bTex" class="sec" disabled>Textura: ortofoto</button>
+  <label>Exageración <input id="exag" type="range" min="1" max="3" step="0.25" value="1"><span id="exagV">1×</span></label>
+  <span id="status">Dibuja el contorno de tu terreno sobre la ortofoto PNOA.</span>
+</header>
+<main>
+  <div id="map"><div class="hint">Bancales: dibuja una línea por el borde de cada muro, cruzando el terreno de lado a lado.</div></div>
+  <div id="view"><div id="info">Aún no hay gemelo generado.</div></div>
+</main>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/proj4@2.11.0/dist/proj4.js"></script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// ---------- Proyección: todo el cálculo se hace en ETRS89 / UTM 30N (EPSG:25830) ----------
+proj4.defs('EPSG:25830', '+proj=utm +zone=30 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs');
+const toUTM = ll => proj4('EPSG:4326', 'EPSG:25830', [ll.lng, ll.lat]);
+
+// ---------- Mapa 2D ----------
+const map = L.map('map').setView([36.7585, -3.5300], 16);
+const pnoa = L.tileLayer('https://www.ign.es/wmts/pnoa-ma?service=WMTS&request=GetTile&version=1.0.0&Format=image/jpeg&layer=OI.OrthoimageCoverage&style=default&tilematrixset=GoogleMapsCompatible&TileMatrix={z}&TileRow={y}&TileCol={x}',
+  { maxZoom: 20, maxNativeZoom: 19, attribution: 'PNOA cedido por © <a href="https://www.ign.es">Instituto Geográfico Nacional</a>' }).addTo(map);
+const osm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' });
+const catastro = L.tileLayer.wms('https://ovc.catastro.meh.es/Cartografia/WMS/ServidorWMS.aspx', {
+  layers: 'Catastro', format: 'image/png', transparent: true, maxZoom: 20, attribution: '© Dirección General del Catastro' });
+L.control.layers({ 'Ortofoto PNOA': pnoa, 'OpenStreetMap': osm }, { 'Lindes del Catastro': catastro }).addTo(map);
+L.control.scale({ imperial: false }).addTo(map);
+
+const parcelaLayer = new L.FeatureGroup().addTo(map);
+const bancalLayer = new L.FeatureGroup().addTo(map);
+const status = t => document.getElementById('status').textContent = t;
+
+// Dibujo propio: clic = añadir vértice · doble clic, Enter o clic en el primer vértice = terminar · Esc = cancelar
+let mode = null, pts = [], temp = null;
+const COL = { parcela: '#9ccc65', bancal: '#ffb300' };
+function startDraw(kind) {
+  cancelDraw(); mode = kind; pts = [];
+  map.doubleClickZoom.disable(); map.getContainer().style.cursor = 'crosshair';
+  document.getElementById(kind === 'parcela' ? 'bParcela' : 'bBancal').classList.add('on');
+  status(kind === 'parcela' ? 'Clic para añadir vértices; doble clic o clic en el primero para cerrar.' : 'Clic a lo largo del borde del muro; doble clic para terminar.');
+}
+function cancelDraw() {
+  if (temp) map.removeLayer(temp); temp = null; mode = null; pts = [];
+  map.doubleClickZoom.enable(); map.getContainer().style.cursor = '';
+  ['bParcela', 'bBancal'].forEach(id => document.getElementById(id).classList.remove('on'));
+}
+function finishDraw() {
+  const kind = mode, ll = pts.slice(); cancelDraw();
+  if (kind === 'parcela' && ll.length >= 3) {
+    parcelaLayer.clearLayers(); parcelaLayer.addLayer(L.polygon(ll, { color: COL.parcela, weight: 3, fillOpacity: .08 }));
+    status(`Terreno dibujado: ${fmt(areaUTM(ll.map(toUTM)))} m². Ahora dibuja los bordes de bancal (opcional) y genera el 3D.`);
+  } else if (kind === 'bancal' && ll.length >= 2) {
+    bancalLayer.addLayer(L.polyline(ll, { color: COL.bancal, weight: 3 }));
+    status(`${bancalLayer.getLayers().length} borde(s) de bancal dibujados.`);
+  }
+}
+let lastClick = 0;
+map.on('click', e => {
+  if (!mode) return;
+  const now = Date.now(), dbl = now - lastClick < 350 && pts.length && map.latLngToContainerPoint(pts[pts.length - 1]).distanceTo(e.containerPoint) < 8;
+  lastClick = now;
+  if (dbl) return finishDraw();
+  if (mode === 'parcela' && pts.length >= 3 && map.latLngToContainerPoint(pts[0]).distanceTo(e.containerPoint) < 12) return finishDraw();
+  pts.push(e.latlng);
+  if (temp) map.removeLayer(temp);
+  temp = (mode === 'parcela' && pts.length >= 3 ? L.polygon(pts, { color: COL.parcela, dashArray: '5 5', fillOpacity: .05 }) : L.polyline(pts, { color: COL[mode], dashArray: '5 5' })).addTo(map);
+});
+map.on('dblclick', () => { if (mode) finishDraw(); });
+addEventListener('keydown', e => { if (!mode) return; if (e.key === 'Enter') finishDraw(); if (e.key === 'Escape') cancelDraw(); });
+document.getElementById('bParcela').onclick = () => mode === 'parcela' ? finishDraw() : startDraw('parcela');
+document.getElementById('bBancal').onclick = () => mode === 'bancal' ? finishDraw() : startDraw('bancal');
+document.getElementById('bBorrar').onclick = () => { bancalLayer.clearLayers(); status('Bancales borrados.'); };
+
+// ---------- Geometría ----------
+const fmt = n => Math.round(n).toLocaleString('es-ES');
+function areaUTM(p) { let a = 0; for (let i = 0; i < p.length; i++) { const [x1, y1] = p[i], [x2, y2] = p[(i + 1) % p.length]; a += x1 * y2 - x2 * y1; } return Math.abs(a) / 2; }
+function inside(x, y, p) { let c = false; for (let i = 0, j = p.length - 1; i < p.length; j = i++) { const [xi, yi] = p[i], [xj, yj] = p[j]; if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) c = !c; } return c; }
+
+// ---------- MDT del IGN vía WCS (CORS abierto, sin API key) ----------
+async function fetchMDT(x0, y0, x1, y1) {
+  const url = `https://servicios.idee.es/wcs-inspire/mdt?SERVICE=WCS&VERSION=2.0.1&REQUEST=GetCoverage&CoverageId=Elevacion25830_5&SUBSET=x(${x0},${x1})&SUBSET=y(${y0},${y1})&FORMAT=application/asc`;
+  const txt = await (await fetch(url)).text();
+  const body = txt.slice(txt.indexOf('ncols'));
+  const tok = body.split(/\s+/);
+  const hdr = {}; let i = 0;
+  while (isNaN(parseFloat(tok[i + 1])) === false && /[a-z]/i.test(tok[i])) { hdr[tok[i].toLowerCase()] = parseFloat(tok[i + 1]); i += 2; }
+  const n = hdr.ncols * hdr.nrows, z = new Float32Array(n);
+  for (let k = 0; k < n; k++) z[k] = parseFloat(tok[i + k]);
+  return { ...hdr, z }; // fila 0 = norte
+}
+function sampler(m) {
+  const top = m.yllcorner + m.nrows * m.cellsize;
+  return (x, y) => {
+    let c = (x - m.xllcorner) / m.cellsize - .5, r = (top - y) / m.cellsize - .5;
+    c = Math.max(0, Math.min(m.ncols - 1.001, c)); r = Math.max(0, Math.min(m.nrows - 1.001, r));
+    const c0 = c | 0, r0 = r | 0, fc = c - c0, fr = r - r0, Z = m.z, W = m.ncols;
+    const a = Z[r0 * W + c0], b = Z[r0 * W + c0 + 1], d = Z[(r0 + 1) * W + c0], e = Z[(r0 + 1) * W + c0 + 1];
+    return (a * (1 - fc) + b * fc) * (1 - fr) + (d * (1 - fc) + e * fc) * fr;
+  };
+}
+
+// ---------- Reconstrucción de bancales ----------
+// Las líneas dibujadas (bordes de muro) parten el terreno en regiones; cada región se
+// aplana a la mediana de su altura MDT y los muros quedan verticales en la línea dibujada.
+function reconstruir(G, lines) {
+  const { nx, ny, res, x0, y1, raw, mask } = G;
+  const barrier = new Uint8Array(nx * ny);
+  for (const ln of lines) {
+    const pts = ln.slice();
+    // prolonga 4 m cada extremo para que corte bien el contorno
+    const ext = (a, b) => { const dx = a[0] - b[0], dy = a[1] - b[1], L0 = Math.hypot(dx, dy) || 1; return [a[0] + dx / L0 * 4, a[1] + dy / L0 * 4]; };
+    pts.unshift(ext(pts[0], pts[1])); pts.push(ext(pts[pts.length - 1], pts[pts.length - 2]));
+    for (let k = 0; k < pts.length - 1; k++) {
+      const [ax, ay] = pts[k], [bx, by] = pts[k + 1], steps = Math.ceil(Math.hypot(bx - ax, by - ay) / (res * .3));
+      for (let s = 0; s <= steps; s++) {
+        const x = ax + (bx - ax) * s / steps, y = ay + (by - ay) * s / steps;
+        const c = Math.round((x - x0) / res), r = Math.round((y1 - y) / res);
+        if (c >= 0 && c < nx && r >= 0 && r < ny) barrier[r * nx + c] = 1;
+      }
+    }
+  }
+  const label = new Int32Array(nx * ny).fill(-1), regions = [];
+  for (let start = 0; start < nx * ny; start++) {
+    if (!mask[start] || barrier[start] || label[start] >= 0) continue;
+    const id = regions.length, cells = [start]; label[start] = id;
+    for (let q = 0; q < cells.length; q++) {
+      const i = cells[q], c = i % nx, r = (i / nx) | 0;
+      for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const cc = c + dc, rr = r + dr; if (cc < 0 || rr < 0 || cc >= nx || rr >= ny) continue;
+        const j = rr * nx + cc; if (mask[j] && !barrier[j] && label[j] < 0) { label[j] = id; cells.push(j); }
+      }
+    }
+    const hs = cells.map(i => raw[i]).sort((a, b) => a - b);
+    regions.push({ cells, h: hs[hs.length >> 1], area: cells.length * res * res });
+  }
+  const out = Float32Array.from(raw);
+  for (const R of regions) if (R.area >= 15) for (const i of R.cells) out[i] = R.h;
+  // celdas de muro: toman la altura del bancal superior vecino → muro vertical
+  for (let i = 0; i < nx * ny; i++) if (barrier[i] && mask[i]) {
+    const c = i % nx, r = (i / nx) | 0; let best = -Infinity;
+    for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1], [2, 0], [-2, 0], [0, 2], [0, -2]]) {
+      const cc = c + dc, rr = r + dr; if (cc < 0 || rr < 0 || cc >= nx || rr >= ny) continue;
+      const l = label[rr * nx + cc]; if (l >= 0 && regions[l].area >= 15) best = Math.max(best, regions[l].h);
+    }
+    if (best > -Infinity) out[i] = best;
+  }
+  return { z: out, regions: regions.filter(R => R.area >= 15).sort((a, b) => b.h - a.h) };
+}
+
+// ---------- Vista 3D ----------
+const view = document.getElementById('view'), info = document.getElementById('info');
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(devicePixelRatio); view.appendChild(renderer.domElement);
+const scene = new THREE.Scene(); scene.background = new THREE.Color(0xa9c9e8);
+const camera = new THREE.PerspectiveCamera(45, 1, 1, 20000);
+const controls = new OrbitControls(camera, renderer.domElement); controls.enableDamping = true;
+scene.add(new THREE.HemisphereLight(0xffffff, 0x556b2f, 1.1));
+const sun = new THREE.DirectionalLight(0xfff2d6, 1.6); sun.position.set(-300, 500, 300); scene.add(sun);
+function resize() { const w = view.clientWidth, h = view.clientHeight; renderer.setSize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix(); }
+addEventListener('resize', resize); resize();
+(function loop() { requestAnimationFrame(loop); controls.update(); renderer.render(scene, camera); })();
+
+let G = null, mesh = null, showBancales = true, useOrtho = true, orthoTex = null;
+
+function buildMesh() {
+  if (mesh) { scene.remove(mesh); mesh.geometry.dispose(); mesh.material.dispose(); }
+  const { nx, ny, res, mask, raw, rec, hmin } = G;
+  const Z = showBancales && rec ? rec.z : raw, ex = +document.getElementById('exag').value;
+  const geo = new THREE.PlaneGeometry((nx - 1) * res, (ny - 1) * res, nx - 1, ny - 1);
+  geo.rotateX(-Math.PI / 2);
+  const pos = geo.attributes.position, col = new Float32Array(nx * ny * 3);
+  for (let i = 0; i < nx * ny; i++) pos.setY(i, (Z[i] - hmin) * ex);
+  geo.computeVertexNormals();
+  const nrm = geo.attributes.normal;
+  for (let i = 0; i < nx * ny; i++) {
+    let r, g, b;
+    if (useOrtho) { r = g = b = 1; }
+    else { const s = nrm.getY(i); // pendiente: plano = cultivo, inclinado = muro/talud
+      if (s > .93) [r, g, b] = [.47, .62, .30]; else if (s > .75) [r, g, b] = [.62, .52, .36]; else [r, g, b] = [.62, .6, .56]; }
+    const k = mask[i] ? 1 : .38; col.set([r * k, g * k, b * k], i * 3);
+  }
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  const mat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: !useOrtho, map: useOrtho ? orthoTex : null });
+  const g2 = useOrtho ? geo : geo.toNonIndexed();
+  if (!useOrtho) g2.computeVertexNormals();
+  mesh = new THREE.Mesh(g2, mat); scene.add(mesh);
+}
+
+function infoText() {
+  const { area, raw, mask, nx, ny, hmin, hmax, rec, mdtRes } = G;
+  let t = `<b>Terreno propio</b>: ${fmt(area)} m² (${(area / 1e4).toFixed(2)} ha)<br>Altitud: ${hmin.toFixed(1)} – ${hmax.toFixed(1)} m<br>Fuente relieve: MDT IGN ${mdtRes} m (WCS)<br>`;
+  if (rec && rec.regions.length) {
+    t += `<b>Bancales reconstruidos: ${rec.regions.length}</b><br>`;
+    rec.regions.slice(0, 12).forEach((R, k) => {
+      const next = rec.regions[k + 1];
+      t += `· ${R.h.toFixed(1)} m · ${fmt(R.area)} m²${next ? ` · desnivel con el siguiente ≈ ${(R.h - next.h).toFixed(1)} m` : ''}<br>`;
+    });
+  } else t += 'Sin bordes de bancal: se muestra el relieve tal cual.';
+  info.innerHTML = t;
+}
+
+document.getElementById('bGenerar').onclick = async () => {
+  if (mode) finishDraw();
+  const poly = parcelaLayer.getLayers()[0];
+  if (!poly) return status('Primero dibuja tu terreno.');
+  const P = poly.getLatLngs()[0].map(toUTM);
+  const xs = P.map(p => p[0]), ys = P.map(p => p[1]), pad = 25;
+  const x0 = Math.floor((Math.min(...xs) - pad) / 5) * 5, x1 = Math.ceil((Math.max(...xs) + pad) / 5) * 5;
+  const y0 = Math.floor((Math.min(...ys) - pad) / 5) * 5, y1 = Math.ceil((Math.max(...ys) + pad) / 5) * 5;
+  if (x1 - x0 > 1500 || y1 - y0 > 1500) return status('Terreno demasiado grande para la demo (máx. ~1,5 km).');
+  status('Descargando relieve (MDT IGN) y ortofoto PNOA…');
+  try {
+    const W = x1 - x0, H = y1 - y0, px = Math.min(2048, Math.round(Math.max(W, H) * 4));
+    const orthoUrl = `https://www.ign.es/wms-inspire/pnoa-ma?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=OI.OrthoimageCoverage&STYLES=&CRS=EPSG:25830&BBOX=${x0},${y0},${x1},${y1}&WIDTH=${Math.round(px * W / Math.max(W, H))}&HEIGHT=${Math.round(px * H / Math.max(W, H))}&FORMAT=image/jpeg`;
+    const [mdt, tex] = await Promise.all([fetchMDT(x0, y0, x1, y1),
+      new THREE.TextureLoader().setCrossOrigin('anonymous').loadAsync(orthoUrl)]);
+    tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 8; orthoTex = tex;
+    const res = Math.max(W, H) > 700 ? 2 : 1, nx = Math.round(W / res) + 1, ny = Math.round(H / res) + 1;
+    const s = sampler(mdt), raw = new Float32Array(nx * ny), mask = new Uint8Array(nx * ny);
+    let hmin = Infinity, hmax = -Infinity;
+    for (let r = 0; r < ny; r++) for (let c = 0; c < nx; c++) {
+      const x = x0 + c * res, y = y1 - r * res, i = r * nx + c;
+      raw[i] = s(x, y); mask[i] = inside(x, y, P) ? 1 : 0;
+      if (mask[i]) { hmin = Math.min(hmin, raw[i]); hmax = Math.max(hmax, raw[i]); }
+    }
+    G = { nx, ny, res, x0, y1, raw, mask, hmin, hmax, area: areaUTM(P), mdtRes: mdt.cellsize };
+    const lines = bancalLayer.getLayers().map(l => l.getLatLngs().map(toUTM));
+    G.rec = lines.length ? reconstruir(G, lines) : null;
+    showBancales = !!G.rec;
+    buildMesh(); infoText();
+    const span = Math.max(W, H);
+    controls.target.set(0, (hmax - hmin) / 2, 0);
+    camera.position.set(span * .35, span * .7 + (hmax - hmin), span * .85);
+    ['bModo', 'bTex'].forEach(id => document.getElementById(id).disabled = false);
+    document.getElementById('bModo').disabled = !G.rec;
+    document.getElementById('bModo').textContent = showBancales ? 'Ver: bancales reconstruidos' : 'Ver: MDT bruto';
+    status('Gemelo generado. Arrastra para girar, rueda para zoom.');
+  } catch (err) { console.error(err); status('Error descargando datos del IGN: ' + err.message); }
+};
+document.getElementById('bModo').onclick = e => { showBancales = !showBancales; e.target.textContent = showBancales ? 'Ver: bancales reconstruidos' : 'Ver: MDT bruto'; buildMesh(); };
+document.getElementById('bTex').onclick = e => { useOrtho = !useOrtho; e.target.textContent = useOrtho ? 'Textura: ortofoto' : 'Textura: low-poly'; buildMesh(); };
+document.getElementById('exag').oninput = e => { document.getElementById('exagV').textContent = e.target.value + '×'; if (G) buildMesh(); };
+</script>
+</body>
+</html>
