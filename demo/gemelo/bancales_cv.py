@@ -156,6 +156,12 @@ def detectar(x0, y0, x1, y1, poly=None, img=None, dem=None, debug=False, params=
     """Devuelve una lista de muros [{'pts': [[x, y], ...] (UTM), 'conf': 0..1}]."""
     P = params_actuales(params)
     F = caracteristicas(x0, y0, x1, y1, poly=poly, img=img, dem=dem, escalas=P["escalas"])
+    if P.get("usar_modelo", True):
+        import modelo  # noqa: WPS433 (Fase 3; opcional)
+        m = modelo.cargar()
+        if m is not None:
+            F["prob"] = modelo.predecir(m["modelo"], modelo.caracteristicas_pixel(F), F["mask"])
+            P = {**P, **m.get("post", {})}
     res = decidir(F, P)
     if debug:
         return res, F
@@ -197,7 +203,7 @@ def caracteristicas(x0, y0, x1, y1, poly=None, img=None, dem=None, escalas=(1.5,
     Lx = ndi.gaussian_filter(L, 2.0, order=(0, 1)); Ly = ndi.gaussian_filter(L, 2.0, order=(1, 0))
     asim = np.maximum(0, ux * Lx + uy * Ly)
     return {"bbox": (x0, y0, x1, y1), "img": img, "mask": mask, "ux": ux, "uy": uy, "tx": tx, "ty": ty,
-            "ridge": ridge, "asim": asim, "H": H, "W": W}
+            "ridge": ridge, "asim": asim, "H": H, "W": W, "L": L, "pendiente": gn * PX / PX ** 2}
 
 
 def decidir(F, P):
@@ -205,7 +211,8 @@ def decidir(F, P):
     x0, y0, x1, y1 = F["bbox"]
     H, W, mask = F["H"], F["W"], F["mask"]
     ux, uy, tx, ty = F["ux"], F["uy"], F["tx"], F["ty"]
-    resp = F["ridge"] + P["k_asim"] * F["asim"]
+    usa_prob = "prob" in F                     # Fase 3: probabilidad del modelo entrenado
+    resp = F["prob"] if usa_prob else F["ridge"] + P["k_asim"] * F["asim"]
 
     # difuminar a lo largo de la curva de nivel (salta huecos de árboles/sombras)
     yy, xx = np.mgrid[0:H, 0:W].astype(np.float32)
@@ -222,7 +229,10 @@ def decidir(F, P):
         for sgn in (1, -1):
             nms &= S >= ndi.map_coordinates(S, [yy + uy * d * sgn, xx + ux * d * sgn], order=1, mode="nearest")
     vals = S[mask]
-    thr = max(np.percentile(vals, P["percentil"]), 1e-6) if vals.size else 1
+    if usa_prob:
+        thr = P.get("umbral_prob", .5)
+    else:
+        thr = max(np.percentile(vals, P["percentil"]), 1e-6) if vals.size else 1
     lines = _thin(ndi.binary_dilation(nms & (S > thr) & mask, iterations=1))
 
     segs = [s for s in _trace(lines) if len(s) * PX >= 1.5]
@@ -241,7 +251,8 @@ def decidir(F, P):
         align = float(np.median(np.abs(d[:, 1] / dn * tx[r_i, c_i] + d[:, 0] / dn * ty[r_i, c_i])))
         if align < P["align_min"]:
             continue
-        fuerza = float(np.mean(S[a[:, 0].astype(int), a[:, 1].astype(int)]) / (thr * 3))
+        media = float(np.mean(S[a[:, 0].astype(int), a[:, 1].astype(int)]))
+        fuerza = media if usa_prob else media / (thr * 3)
         out.append({"rc": a, "conf": float(min(1, .5 * min(1, fuerza) + .5 * align)), "len": length,
                     "score": fuerza * length})
 
