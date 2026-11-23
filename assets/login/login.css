@@ -1,0 +1,218 @@
+/* Login (/login): fondo «Aurora», caja de cristal y Demetreo que llega corriendo, se sienta
+   sobre la caja y se tapa los ojos al escribir la contraseña.
+   Lo carga solo demeter/pages/login.py. Todas las clases llevan prefijo pl- (o pl4__) para no
+   chocar con el resto de la app. Los scripts son assets/login/fondo.js y assets/login/demetreo.js. */
+
+/* Fondo de la página y barra clara (la barra es la de layout(), en proto.css). */
+body.p-login { margin: 0; background: #0e1411; color: #eceeed; }
+body.p-login .bar__logo { color: #fff; }
+body.p-login .bar__cta--ghost { color: #fff; border-color: rgba(255, 255, 255, .55); background: rgba(255, 255, 255, .08); }
+@media (hover: hover) and (pointer: fine) { body.p-login .bar__cta--ghost:hover { background: rgba(255, 255, 255, .2); } }
+
+:root { --pl-ink: #12181a;
+  --pl-muted: #4a555b;
+  --pl-fog: #aeb4b6;
+  --pl-paper: #eceeed;
+  --pl-line: rgba(18, 24, 26, .13);
+  --pl-accent: #b33a12;
+  --pl-accent-text: #8f2a09; /* terracota para TEXTO sobre niebla/papel: ~5:1 (el acento puro da ~3,5:1) */
+  --pl-olive: #3e5a22;
+  --pl-ease: cubic-bezier(.23, 1, .32, 1);
+  --pl-sans: "Mona Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --pl-serif: "Instrument Serif", Georgia, serif;
+  --pl-mono: "Geist Mono", ui-monospace, "SFMono-Regular", monospace; }
+.pl-login *, .pl-login *::before, .pl-login *::after { box-sizing: border-box; }
+.pl-login { min-height: 100svh; }
+.pl-login h1, .pl-login p, .pl-login figure { margin: 0; }
+/* ---------------------------------------------------------------- piezas comunes */
+.pl-kick { font: 12px var(--pl-mono); letter-spacing: .06em; text-transform: uppercase; color: #3a4448; }
+.pl-field { display: grid; gap: 8px; }
+.pl-label { font: 12px var(--pl-mono); letter-spacing: .06em; text-transform: uppercase; color: #3a4448; }
+.pl-control { position: relative; display: grid; }
+.pl-input { width: 100%; min-width: 0; font: 16px var(--pl-sans); color: var(--pl-ink); outline: 2px solid transparent; }
+.pl-input::placeholder { color: #5f6a70; }
+/* El error: reserva su altura y entra con un fundido corto. Es una animación (no transición)
+   para que se repita en cada intento fallido. */
+.pl-err { min-height: 1.3em; font: 500 14px / 1.3 var(--pl-sans); color: var(--pl-accent-text); }
+.pl-err:not(:empty) { animation: pl-err-in 150ms var(--pl-ease); }
+@keyframes pl-err-in { from { opacity: 0; transform: translateY(4px); } }
+@keyframes pl-fade { from { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .pl-err:not(:empty) { animation-name: pl-fade; }
+}
+@keyframes pl-rise { from { opacity: 0; transform: translateY(8px); } }
+.pl4 { position: relative; min-height: 100svh; display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 64px; align-items: center; padding: 110px 32px 88px;
+  background: radial-gradient(120% 90% at 70% 45%, #c3c8c9 0%, var(--pl-fog) 60%, #9ea5a8 100%); color: var(--pl-ink); font-family: var(--pl-sans); }
+.pl4__right { position: relative; justify-self: center; width: min(440px, 100%); display: grid; justify-items: center; padding-top: 30px; }
+/* Bocadillo del aguacate: solo opacidad y un pequeño desplazamiento. Sale más rápido de lo que entra. */
+.pl4__bubble { position: absolute; top: 0; left: 50%; z-index: 4; max-width: min(340px, 100%); display: inline-flex; align-items: center; gap: 8px; padding: 6px 14px; border-radius: 99px; background: rgba(255, 255, 255, .96); color: #16362d; font: 600 12px / 1.3 var(--pl-sans);
+  box-shadow: 0 4px 14px rgba(14, 34, 49, .18); pointer-events: none; opacity: 0; transform: translate(-50%, 8px); transition: opacity .15s ease-out, transform .15s var(--pl-ease); }
+.pl4__bubble.is-on { opacity: 1; transform: translate(-50%, 0); transition-duration: .2s; }
+/* El aguacate: su base plana se apoya en el anillo de la caja. */
+.pl4__av { position: relative; z-index: 3; width: min(250px, 66%); margin-bottom: -6px; cursor: pointer; user-select: none; -webkit-user-select: none; animation: pl-rise 350ms var(--pl-ease) 120ms both; }
+.pl4__svg { display: block; width: 100%; height: auto; overflow: visible; }
+.pl4 .pupil { transition: transform .08s var(--pl-ease); transform-box: fill-box; transform-origin: center; }
+.pl4 .eyebrow-left, .pl4 .eyebrow-right { transition: transform .32s cubic-bezier(.34, 1.56, .64, 1); transform-box: fill-box; transform-origin: center; }
+.pl4 .avocado-arm-left, .pl4 .avocado-arm-right { transition: transform .42s cubic-bezier(.34, 1.45, .64, 1); transform-box: fill-box; transform-origin: bottom center; }
+.pl4 .avocado-state-cover .avocado-arm-left, .pl4 .avocado-state-peek .avocado-arm-left { transform: translate(34px, -78px) rotate(14deg); }
+.pl4 .avocado-state-cover .avocado-arm-right { transform: translate(-34px, -78px) rotate(-14deg); }
+.pl4 .avocado-state-peek .avocado-arm-right { transform: translate(-24px, -34px) rotate(-4deg); }
+.pl4 .avocado-state-cover .eyebrow-left { transform: translateY(-4px) rotate(-10deg); }
+.pl4 .avocado-state-cover .eyebrow-right { transform: translateY(-4px) rotate(10deg); }
+.pl4 .avocado-state-peek .eyebrow-left { transform: translateY(-3px) rotate(-8deg); }
+.pl4 .avocado-state-peek .eyebrow-right { transform: translateY(-6px) rotate(-6deg); }
+.pl4 .avocado-body-float { animation: pl4-float 4s ease-in-out infinite; }
+@keyframes pl4-float { 50% { transform: translateY(-3px); } }
+.pl4 .eye-blink { transform-box: fill-box; transform-origin: center; animation: pl4-blink 5.2s infinite; }
+@keyframes pl4-blink { 0%, 95%, 100% { transform: scaleY(1); } 97.5% { transform: scaleY(.08); } }
+.pl4 #av-bounce { transform-box: fill-box; transform-origin: bottom center; }
+.pl4 #av-bounce.avocado-happy { animation: pl4-happy .55s cubic-bezier(.34, 1.56, .64, 1); }
+@keyframes pl4-happy { 0%, 100% { transform: translateY(0) scale(1); } 35% { transform: translateY(-14px) scale(1.03, .97); } 70% { transform: translateY(2px) scale(.99, 1.01); } }
+.pl4 #av-bounce.avocado-oops { animation: pl4-oops .3s var(--pl-ease); }
+@keyframes pl4-oops { 25% { transform: translateX(-3px) rotate(-1.5deg); } 60% { transform: translateX(3px) rotate(1deg); } }
+/* La caja: el mismo marco de doble anillo que la ventana de la foto, y una franja oscura
+   abajo como la pantalla de un salpicadero. */
+.pl4__box { position: relative; z-index: 1; width: 100%; overflow: hidden; border-radius: 34px; background: rgba(238, 241, 240, .9);
+  box-shadow: 0 0 0 10px #c3d3da, 0 0 0 12px #8fa7b2, 0 30px 60px -30px rgba(14, 34, 49, .5); animation: pl-rise 300ms var(--pl-ease) both; }
+.pl4__body { display: grid; gap: 14px; padding: 36px 32px 28px; }
+.pl4__h { font: 500 40px / .98 var(--pl-sans); letter-spacing: -.045em; }
+.pl4__h em { font: italic 400 1.05em var(--pl-serif); letter-spacing: -.02em; }
+.pl4__form { display: grid; gap: 14px; margin-top: 4px; }
+.pl4 .pl-input { height: 48px; padding: 0 16px; border-radius: 12px; border: 1px solid rgba(18, 24, 26, .45); background: rgba(255, 255, 255, .75);
+  transition: border-color .15s ease, background-color .15s ease, box-shadow .15s ease; }
+.pl4 .pl-input:focus-visible { border-color: var(--pl-ink); background: #fff; box-shadow: 0 0 0 3px rgba(18, 24, 26, .14); }
+.pl4 .pl-input[aria-invalid="true"] { border-color: var(--pl-accent-text); }
+.pl4 .pl-input:-webkit-autofill { -webkit-text-fill-color: var(--pl-ink); box-shadow: 0 0 0 100px #f3f5f4 inset; }
+.pl4 .pl-control .pl-input { padding-right: 92px; }
+.pl4__ojo { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); height: 36px; padding: 0 12px; border: 0; border-radius: 8px; background: transparent; color: #3a4448; font: 12px var(--pl-mono); letter-spacing: .04em; cursor: pointer; transition: background-color .15s ease, color .15s ease; }
+.pl4__ojo:focus-visible { outline: 2px solid var(--pl-ink); outline-offset: -2px; }
+@media (hover: hover) and (pointer: fine) {
+  .pl4__ojo:hover { background: rgba(18, 24, 26, .07); color: var(--pl-ink); }
+}
+.pl4__btn { display: inline-flex; align-items: center; justify-content: center; width: 100%; height: 48px; border: 0; border-radius: 99px; background: var(--pl-ink); color: #fff; font: 500 15px var(--pl-sans); cursor: pointer;
+  transition: transform .16s var(--pl-ease), background-color .15s ease, opacity .15s ease; }
+@media (hover: hover) and (pointer: fine) {
+  .pl4__btn:not([disabled]):hover { background: #2b3438; }
+}
+.pl4__btn:not([disabled]):active { transform: scale(.97); }
+.pl4__btn:focus-visible { outline: 2px solid var(--pl-ink); outline-offset: 3px; }
+.pl4__btn[disabled] { opacity: .6; cursor: default; }
+.pl4__dash { display: flex; align-items: center; justify-content: flex-start; gap: 12px; flex-wrap: wrap; padding: 12px 32px; background: var(--pl-ink); color: #dfe6cf; font: 12px var(--pl-mono); }
+.pl4__demo { color: #dfe6cf; }
+@media (max-width: 760px) {
+  .pl4 { grid-template-columns: 1fr; padding: 80px 18px 96px; gap: 28px; align-content: start; }
+  .pl4__right { padding-top: 34px; }
+  .pl4__body { padding: 28px 22px 22px; }
+  .pl4__h { font-size: 34px; }
+  .pl4__dash { padding: 12px 22px; }
+}
+.pl-login .pl4__body { padding: 40px 34px 30px; }
+.pl-login .pl-kick { color: rgba(236, 238, 237, .8); }
+.pl-login .pl4__h { color: #fff; font-size: 46px; text-shadow: 0 2px 24px rgba(0, 0, 0, .35); }
+.pl-login .pl4__h em { color: #f2c9b4; }
+.pl-login .pl-label { color: rgba(236, 238, 237, .75); transition: color .2s ease; }
+.pl-login .pl-field:focus-within .pl-label { color: #fff; }
+.pl-login .pl4 .pl-input { height: 54px; border-radius: 16px; color: #fff; border: 1px solid rgba(255, 255, 255, .26); background: rgba(18, 24, 26, .32);
+  transition: border-color .2s ease, background-color .2s ease, box-shadow .25s var(--pl-ease), transform .25s var(--pl-ease); }
+.pl-login .pl4 .pl-input:hover { border-color: rgba(255, 255, 255, .5); }
+.pl-login .pl4 .pl-input:focus-visible { border-color: #fff; background: rgba(18, 24, 26, .5); transform: translateY(-1px);
+  box-shadow: 0 0 0 4px rgba(236, 238, 237, .16), 0 12px 28px -12px rgba(0, 0, 0, .6); }
+.pl-login .pl4 .pl-input[aria-invalid="true"] { border-color: #f2a07f; }
+.pl-login .pl4 .pl-input:-webkit-autofill { -webkit-text-fill-color: #fff; box-shadow: 0 0 0 100px #2a3a22 inset; }
+.pl-login .pl4__ojo { color: rgba(236, 238, 237, .85); }
+.pl-login .pl4__ojo:focus-visible { outline-color: #fff; }
+.pl-login .pl-err { color: #f7b99d; }
+.pl-login .pl4__btn { height: 54px; font-size: 16px; color: #fff; letter-spacing: .01em; background: var(--pl-accent); }
+@media (hover: hover) and (pointer: fine) {
+  .pl-login .pl4__btn:not([disabled]):hover { background: #9a2f0a; }
+}
+.pl-login .pl4__btn:focus-visible { outline-color: #fff; }
+.pl-login .pl4__dash { background: rgba(18, 24, 26, .5); color: rgba(236, 238, 237, .85); border-top: 1px solid rgba(255, 255, 255, .12); }
+.pl-login .pl4__demo { color: rgba(236, 238, 237, .85); }
+.pl-login .pl4__big { display: block; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  font: 700 var(--big, 25vw) / .8 var(--pl-sans); letter-spacing: -.06em; color: transparent; background: linear-gradient(100deg, rgba(190, 214, 150, .07), rgba(242, 201, 180, .08) 35%, rgba(179, 58, 18, .11) 65%, rgba(190, 214, 150, .07)) 0 0 / 200% 100%; -webkit-background-clip: text; background-clip: text; -webkit-text-stroke: 1.5px rgba(236, 238, 237, .055); white-space: nowrap; }
+.pl-login .pl4__deco { display: block; z-index: 1; }
+/* Aurora: el login en el centro exacto de la pagina y la mascota apoyada directamente en la caja, sin hueco. */
+.pl-login .pl4__av { margin-bottom: calc(min(250px, 66%) * -.06); }
+@media (min-width: 761px) {
+  .pl-login .pl4 { padding: 50px 32px 80px; align-content: center; }
+}
+/* ---- Piezas decorativas (aria-hidden): ocultas salvo en el layout que las usa ---- */
+.pl4__deco { display: none; position: absolute; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
+.pl4__big, .pl4__fx { display: none; }
+/* ---- Escritorio: el login en una sola columna, centrado ---- */
+@media (min-width: 761px) {
+  .pl-login .pl4 { grid-template-columns: minmax(0, 1fr); justify-items: center; }
+  .pl-login .pl4__right { z-index: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pl-login .pl4__big { animation: none; }
+}
+.pl-login .pl4 { background: #0e1411; }
+.pl-login .pl4__fx { display: block; position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; }
+.pl-login .pl4__box { border-radius: 30px; background: rgba(14, 20, 17, .55); -webkit-backdrop-filter: blur(22px) saturate(1.3); backdrop-filter: blur(22px) saturate(1.3);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .22), 0 0 0 1px rgba(255, 255, 255, .14), 0 40px 80px -30px rgba(0, 0, 0, .7); }
+.pl-login .pl4__h { color: #fff; font-size: 46px; }
+.pl-login .pl4__h em { color: #f2c9b4; }
+.pl-login .pl4__dash { background: rgba(0, 0, 0, .3); border-top: 1px solid rgba(236, 238, 237, .12); }
+/* ---- Entrada: cada pieza se funde con un leve desenfoque y sube, en escalera ---- */
+@keyframes pl4-fadein { from { opacity: 0; filter: blur(10px); transform: translateY(18px); } to { opacity: 1; filter: blur(0); transform: none; } }
+.pl-login .pl4__av, .pl-login .pl4__box, .pl-login .pl-kick, .pl-login .pl4__h, .pl-login .pl4__form > *, .pl-login .pl4__dash { animation: pl4-fadein .75s var(--pl-ease) backwards; }
+.pl-login .pl4__av { animation-delay: .08s; }
+.pl-login .pl4__box { animation-delay: .18s; }
+.pl-login .pl-kick { animation-delay: .34s; }
+.pl-login .pl4__h { animation-delay: .44s; }
+.pl-login .pl4__form > :nth-child(1) { animation-delay: .56s; }
+.pl-login .pl4__form > :nth-child(2) { animation-delay: .66s; }
+.pl-login .pl4__form > :nth-child(3) { animation-delay: .7s; }
+.pl-login .pl4__form > :nth-child(4) { animation-delay: .78s; }
+.pl-login .pl4__dash { animation-delay: .9s; }
+/* ---- Llegada: Demetreo entra por la izquierda, anda, salta y se sienta sobre la caja (5,7 s) ----
+   Seis fotogramas (assets/login/img/demetreo-1..6.webp) que se funden entre sí: andar 1-2-3-2,
+   salto (4), aterrizaje agachado (5) y sentado (6). Al final se funde con el Demetreo vivo (SVG),
+   que es el que reacciona al formulario. Con reduced-motion no hay llegada: aparece ya sentado. */
+.pl4__runway { display: none; }
+.pl-login .pl4 { overflow-x: clip; }
+.pl-login .pl4__runway { display: block; position: absolute; left: 50%; bottom: -9px; width: 308px; height: 363px; margin-left: -154px; pointer-events: none;
+  animation: pl4-runx 5.7s linear .2s backwards, pl4-runfade 5.7s linear .2s both; }
+.pl4__run { position: absolute; inset: 0; transform-origin: 50% 94%; }
+.pl-login .pl4__run { animation: pl4-arc 5.7s linear .2s backwards; will-change: transform; }
+.pl4__f { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; backface-visibility: hidden; }
+.pl4__shade { position: absolute; left: 50%; bottom: 20px; width: 200px; height: 16px; margin-left: -100px; border-radius: 50%; background: radial-gradient(closest-side, rgba(0, 0, 0, .38), transparent); }
+.pl-login .pl4__shade { animation: pl4-shade 5.7s linear .2s backwards; }
+.pl-login .pl4__svg { transform-origin: 50% 100%; animation: pl4-svgin 5.7s linear .2s both; }
+.pl-login .pl4__f1 { animation: pl4-f1 5.7s linear .2s both; }
+.pl-login .pl4__f2 { animation: pl4-f2 5.7s linear .2s both; }
+.pl-login .pl4__f3 { animation: pl4-f3 5.7s linear .2s both; }
+.pl-login .pl4__f4 { animation: pl4-f4 5.7s linear .2s both; }
+.pl-login .pl4__f5 { animation: pl4-f5 5.7s linear .2s both; }
+.pl-login .pl4__f6 { animation: pl4-f6 5.7s linear .2s both; }
+@keyframes pl4-runx { 0% { translate: calc(min(75vw, 1000px) * -1) 0; animation-timing-function: linear; } 63.158% { translate: -130px 0; animation-timing-function: linear; } 75.439% { translate: 0 0; } 100% { translate: 0 0; } }
+@keyframes pl4-runfade { 0%, 94.737% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes pl4-svgin { 0%, 94.737% { opacity: 0; scale: .95; } 100% { opacity: 1; scale: 1; } }
+@keyframes pl4-shade { 0%, 63.158% { opacity: 1; scale: 1; animation-timing-function: ease-out; } 69.298% { opacity: .3; scale: .7; animation-timing-function: ease-in; } 75.439% { opacity: 1; scale: 1; } 100% { opacity: 1; scale: 1; } }
+@keyframes pl4-arc { 0.000% { transform: translateY(0); animation-timing-function: ease-in-out; } 3.947% { transform: translateY(-5px); animation-timing-function: ease-in-out; } 7.895% { transform: translateY(0); animation-timing-function: ease-in-out; } 11.842% { transform: translateY(-5px); animation-timing-function: ease-in-out; } 15.789% { transform: translateY(0); animation-timing-function: ease-in-out; } 19.737% { transform: translateY(-5px); animation-timing-function: ease-in-out; } 23.684% { transform: translateY(0); animation-timing-function: ease-in-out; } 27.632% { transform: translateY(-5px); animation-timing-function: ease-in-out; } 31.579% { transform: translateY(0); animation-timing-function: ease-in-out; } 35.526% { transform: translateY(-5px); animation-timing-function: ease-in-out; } 39.474% { transform: translateY(0); animation-timing-function: ease-in-out; } 43.421% { transform: translateY(-5px); animation-timing-function: ease-in-out; } 47.368% { transform: translateY(0); animation-timing-function: ease-in-out; } 51.316% { transform: translateY(-5px); animation-timing-function: ease-in-out; } 55.263% { transform: translateY(0); animation-timing-function: ease-in-out; } 59.211% { transform: translateY(-5px); animation-timing-function: ease-in-out; } 60.526% { transform: translateY(0) scale(1, 1); animation-timing-function: ease-in-out; } 63.158% { transform: translateY(1px) scale(1.05, .93); animation-timing-function: cubic-bezier(.2, .8, .3, 1); } 66.316% { transform: translateY(-20px) scale(.96, 1.07); animation-timing-function: cubic-bezier(.3, .7, .5, 1); } 69.298% { transform: translateY(-31px) scale(1, 1); animation-timing-function: cubic-bezier(.5, 0, .8, .5); } 72.807% { transform: translateY(-14px) scale(.98, 1.03); animation-timing-function: cubic-bezier(.6, 0, .9, .6); } 75.439% { transform: translateY(0) scale(1.12, .86); animation-timing-function: cubic-bezier(.2, .9, .3, 1); } 78.070% { transform: translateY(-5px) scale(.97, 1.04); animation-timing-function: ease-in-out; } 81.053% { transform: translateY(0) scale(1, 1); } 100% { transform: translateY(0) scale(1, 1); } }
+@keyframes pl4-f1 { 0.000% { opacity: 1; } 6.491% { opacity: 1; } 9.298% { opacity: 0; } 30.175% { opacity: 0; } 32.982% { opacity: 1; } 38.070% { opacity: 1; } 40.877% { opacity: 0; } 100.000% { opacity: 0; } }
+@keyframes pl4-f2 { 0.000% { opacity: 0; } 6.491% { opacity: 0; } 9.298% { opacity: 1; } 14.386% { opacity: 1; } 17.193% { opacity: 0; } 22.281% { opacity: 0; } 25.088% { opacity: 1; } 30.175% { opacity: 1; } 32.982% { opacity: 0; } 38.070% { opacity: 0; } 40.877% { opacity: 1; } 45.965% { opacity: 1; } 48.772% { opacity: 0; } 53.860% { opacity: 0; } 56.667% { opacity: 1; } 61.754% { opacity: 1; } 64.561% { opacity: 0; } 100.000% { opacity: 0; } }
+@keyframes pl4-f3 { 0.000% { opacity: 0; } 14.386% { opacity: 0; } 17.193% { opacity: 1; } 22.281% { opacity: 1; } 25.088% { opacity: 0; } 45.965% { opacity: 0; } 48.772% { opacity: 1; } 53.860% { opacity: 1; } 56.667% { opacity: 0; } 100.000% { opacity: 0; } }
+@keyframes pl4-f4 { 0.000% { opacity: 0; } 61.754% { opacity: 0; } 64.561% { opacity: 1; } 74.035% { opacity: 1; } 76.842% { opacity: 0; } 100.000% { opacity: 0; } }
+@keyframes pl4-f5 { 0.000% { opacity: 0; } 74.035% { opacity: 0; } 76.842% { opacity: 1; } 80.175% { opacity: 1; } 82.982% { opacity: 0; } 100.000% { opacity: 0; } }
+@keyframes pl4-f6 { 0.000% { opacity: 0; } 80.175% { opacity: 0; } 82.982% { opacity: 1; } 93.860% { opacity: 1; } 100.000% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .pl-login .pl4__runway { display: none; }
+  .pl-login .pl4__svg { animation: none; }
+}
+/* Reduced motion: sin rebotes, flotación ni parpadeo; las manos se tapan al instante
+   (es información sobre la privacidad de la contraseña) y la entrada solo se funde. */
+@media (prefers-reduced-motion: reduce) {
+  .pl4__av, .pl4__box { animation-name: pl-fade; }
+  .pl4 .pupil, .pl4 .eyebrow-left, .pl4 .eyebrow-right, .pl4 .avocado-arm-left, .pl4 .avocado-arm-right { transition: none; }
+  .pl4 .avocado-body-float, .pl4 .eye-blink { animation: none; }
+  .pl4__bubble { transition: opacity .15s ease-out; transform: translate(-50%, 0); }
+  .pl4__live i::after { animation: none; }
+}
+
+/* Móvil: título algo más pequeño (va al final para ganar a las reglas de la caja). */
+@media (max-width: 760px) {
+  .pl-login .pl4__h { font-size: 38px; }
+}

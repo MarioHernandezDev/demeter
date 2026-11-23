@@ -45,14 +45,23 @@ SECCIONES: tuple[Seccion, ...] = (
     Seccion("/ajustes", "Ajustes"),
 )
 
-# Anclajes de la portada (secciones de demeter/pages/plantillas/inicio.html).
+# Enlaces de la barra de la portada. «Panel» baja a su sección de la portada; el resto
+# lleva a la app (sin sesión, require_login manda antes al login y luego vuelve) o fuera.
+API_DOCS = "http://localhost:8000/docs"  # documentación de la API en local
+REPO = "https://github.com/MarioHernandezDev/demeter"
 ANCLAS_PORTADA: tuple[tuple[str, str], ...] = (
     ("#panel", "Panel"),
-    ("#cultivos", "Cultivos"),
-    ("#gemelo", "Gemelo"),
-    ("#api", "API"),
-    ("#codigo", "Código"),
+    ("/parcelas", "Cultivos"),
+    ("/dashboard", "Gemelo"),
+    (API_DOCS, "API"),
+    (REPO, "Código"),
 )
+
+
+def _enlace_portada(href: str, texto: str) -> rx.Component:
+    """Los enlaces externos (API, GitHub) se abren en otra pestaña."""
+    fuera = href.startswith("http")
+    return rx.el.a(texto, href=href, **({"target": "_blank", "rel": "noopener"} if fuera else {}))
 
 
 def _marca(href: str = "/") -> rx.Component:
@@ -86,7 +95,7 @@ def _barra_app(activa: str) -> list[rx.Component]:
 def _barra_portada() -> list[rx.Component]:
     return [
         _marca("#top"),
-        rx.el.nav(*[rx.el.a(t, href=h) for h, t in ANCLAS_PORTADA], class_name="bar__nav", aria_label="Principal"),
+        rx.el.nav(*[_enlace_portada(h, t) for h, t in ANCLAS_PORTADA], class_name="bar__nav", aria_label="Principal"),
         rx.el.button("Ver el panel en vivo", type="button", on_click=AuthState.ir_al_panel, class_name="bar__cta"),
     ]
 

@@ -202,8 +202,8 @@ const foot = document.createElement("footer");
 foot.className = "mf";
 foot.innerHTML = `
   <div class="mf__top">
-    <nav class="mf__col" aria-label="Explorar"><p class="mf__h">Explorar</p><a href="/dashboard">Panel</a><a href="/parcelas">Parcelas</a><a href="/alertas">Alertas</a><a href="/#api">API</a></nav>
-    <nav class="mf__col" aria-label="Proyecto"><p class="mf__h">Proyecto</p><a href="/#codigo">Código en GitHub</a><a href="/#codigo">Licencia GPL v3</a><a href="/">Equipo Who is Json</a></nav>
+    <nav class="mf__col" aria-label="Explorar"><p class="mf__h">Explorar</p><a href="/dashboard">Panel</a><a href="/parcelas">Parcelas</a><a href="/alertas">Alertas</a><a href="http://localhost:8000/docs" target="_blank" rel="noopener">API</a></nav>
+    <nav class="mf__col" aria-label="Proyecto"><p class="mf__h">Proyecto</p><a href="https://github.com/MarioHernandezDev/demeter" target="_blank" rel="noopener">Código en GitHub</a><a href="https://github.com/MarioHernandezDev/demeter/blob/main/LICENSE" target="_blank" rel="noopener">Licencia GPL v3</a><a href="/">Equipo Who is Json</a></nav>
     <a class="mf__word" href="/">Demeter</a>
     <div class="mf__col"><p class="mf__h">Reto</p><span>II Reto Agrotech 2026</span><span>Asociación Granada +</span></div>
     <div class="mf__col"><p class="mf__h">Finca</p><span>La Costa · Carchuna</span><span>Motril, Granada</span></div>
