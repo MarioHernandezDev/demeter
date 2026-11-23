@@ -51,3 +51,22 @@ def test_el_svg_tiene_las_piezas_que_mueve_el_script():
     # Las manos las mueve el CSS con las clases que pone el script.
     css = (ASSETS / "login" / "login.css").read_text(encoding="utf-8")
     assert "avocado-arm-left" in svg and "avocado-state-cover" in css and "avocado-state-cover" in js
+
+
+def test_hay_una_ruta_para_cerrar_sesion_desde_las_plantillas():
+    import demeter.demeter  # noqa: F401  (registra las páginas igual que «reflex run»)
+    from reflex_base.registry import RegistrationContext
+
+    paginas = {kw.get("route"): kw for _, kw in RegistrationContext.ensure_context().decorated_pages}
+    assert "/salir" in paginas
+    ajustes = (pagina.SVG_DEMETREO.parent.parent / "pages" / "plantillas" / "ajustes.html").read_text(encoding="utf-8")
+    assert 'href="/salir"' in ajustes
+
+
+def test_la_barra_de_la_portada_no_tiene_anclas_rotas():
+    from demeter.components.layout import ANCLAS_PORTADA
+
+    portada = (pagina.SVG_DEMETREO.parent.parent / "pages" / "plantillas" / "inicio.html").read_text(encoding="utf-8")
+    for href, _ in ANCLAS_PORTADA:
+        if href.startswith("#"):
+            assert f'id="{href[1:]}"' in portada, href
