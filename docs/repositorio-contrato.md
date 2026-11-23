@@ -120,9 +120,11 @@ Hay dos, y se importan de `demeter.db.repositorio`:
 | Para | Pregunta |
 |---|---|
 | Mario L. | ¿Bastan las seis funciones de alertas para el motor (D2) y la comprobación OFFLINE? |
-| Mario L. y Alex | Frecuencia de lecturas: 1 por minuto (OFFLINE a 10 min, unas 600.000 lecturas en 30 días) o 1 cada 5 minutos (OFFLINE a 15 min, unas 120.000). Afecta al simulador (#15) y al histórico (#16), no a este contrato |
 
-### Cerradas (respuestas de Alex, 23/11/2026)
+### Cerradas (23/11/2026)
+
+- **Frecuencia de lecturas: una por minuto por sensor**, con OFFLINE a los 10 minutos sin
+  datos (Alex y Mario L.). Unas 20.000 lecturas al día y 600.000 en 30 días con 14 sensores.
 
 - `get_user` y `get_user_by_username` devuelven el modelo `User` con `password_hash`.
 - `create_user` se queda como está, llamada con argumentos por nombre.
