@@ -1,0 +1,103 @@
+<svg id="av-svg" viewBox="0 0 360 245" class="pl4__svg" aria-hidden="true" focusable="false">
+  <defs>
+    <linearGradient id="avoOuterSkin" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#2c4b1a"/><stop offset="100%" stop-color="#192e0d"/></linearGradient>
+    <linearGradient id="avoRind" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="#58852b"/><stop offset="100%" stop-color="#3c611a"/></linearGradient>
+    <radialGradient id="avoFlesh" cx="48%" cy="42%" r="65%"><stop offset="0%" stop-color="#d2ec95"/><stop offset="65%" stop-color="#b4da69"/><stop offset="100%" stop-color="#92c246"/></radialGradient>
+    <radialGradient id="avoPitTop" cx="42%" cy="30%" r="70%"><stop offset="0%" stop-color="#a66332"/><stop offset="60%" stop-color="#783f18"/><stop offset="100%" stop-color="#4e260b"/></radialGradient>
+    <linearGradient id="goldTrim" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#ffe066"/><stop offset="50%" stop-color="#e6a817"/><stop offset="100%" stop-color="#b07604"/></linearGradient>
+  </defs>
+
+  <g id="av-bounce">
+  <g id="av-head" class="avocado-body-float">
+    <!-- cetro dorado -->
+    <g id="av-scepter"><g transform="translate(296, 152) rotate(14)">
+      <rect x="-4" y="20" width="8" height="65" rx="3" fill="url(#goldTrim)" stroke="#694605" stroke-width="2"/>
+      <ellipse cx="0" cy="20" rx="11" ry="4" fill="url(#goldTrim)" stroke="#694605" stroke-width="1.8"/>
+      <circle cx="0" cy="6" r="12" fill="url(#goldTrim)" stroke="#694605" stroke-width="2"/>
+      <circle cx="0" cy="-9" r="4.5" fill="url(#goldTrim)" stroke="#694605" stroke-width="1.8"/>
+      <circle cx="-4" cy="2" r="2.8" fill="#fff7bf" opacity="0.85"/>
+      <circle id="av-tip" cx="0" cy="-9" r="1" fill="none"/>
+    </g></g>
+
+    <!-- piel, corteza, pulpa y hueso -->
+    <path d="M 180 24 C 118 24, 86 118, 66 226 L 294 226 C 274 118, 242 24, 180 24 Z" fill="url(#avoOuterSkin)" stroke="#16260c" stroke-width="3.2" stroke-linejoin="round"/>
+    <path d="M 88 145 C 80 172, 76 196, 74 216" fill="none" stroke="#476e28" stroke-width="2.4" stroke-dasharray="5 7" stroke-linecap="round"/>
+    <path d="M 272 145 C 280 172, 284 196, 286 216" fill="none" stroke="#476e28" stroke-width="2.4" stroke-dasharray="5 7" stroke-linecap="round"/>
+    <path d="M 180 35 C 125 35, 96 124, 77 226 L 283 226 C 264 124, 235 35, 180 35 Z" fill="url(#avoRind)"/>
+    <path d="M 180 49 C 134 49, 108 132, 91 226 L 269 226 C 252 132, 226 49, 180 49 Z" fill="url(#avoFlesh)"/>
+    <path d="M 134 226 C 138 196, 157 182, 180 182 C 203 182, 222 196, 226 226 Z" fill="url(#avoPitTop)" stroke="#4a250b" stroke-width="2.2"/>
+    <path d="M 155 203 C 164 193, 178 190, 192 194" fill="none" stroke="#c78350" stroke-width="4" stroke-linecap="round" opacity="0.5"/>
+
+    <!-- toga y broche -->
+    <path d="M 252 174 L 274 190 L 268 226 L 210 226 C 228 210, 242 192, 252 174 Z" fill="#ffffff" stroke="#2c332e" stroke-width="2.2" stroke-linejoin="round"/>
+    <path d="M 248 178 C 234 198, 218 214, 200 226" fill="none" stroke="#b87e0a" stroke-width="4"/>
+    <circle cx="256" cy="176" r="10.5" fill="url(#goldTrim)" stroke="#694605" stroke-width="2"/>
+    <circle cx="253" cy="173" r="2.8" fill="#fff7bf" opacity="0.85"/>
+
+    <!-- corona de olivo -->
+    <g>
+      <path d="M 106 108 C 124 72, 148 48, 174 39" fill="none" stroke="#425722" stroke-width="2.8" stroke-linecap="round"/>
+      <path d="M 113 92 C 102 80, 102 65, 110 56 C 117 67, 119 80, 113 92 Z" fill="#688538" stroke="#2e3d17" stroke-width="1.7"/>
+      <path d="M 126 76 C 113 61, 113 44, 123 35 C 132 48, 134 63, 126 76 Z" fill="#779642" stroke="#2e3d17" stroke-width="1.7"/>
+      <path d="M 142 59 C 131 44, 133 27, 143 18 C 150 33, 150 48, 142 59 Z" fill="#688538" stroke="#2e3d17" stroke-width="1.7"/>
+      <path d="M 160 46 C 152 31, 156 16, 167 10 C 171 23, 167 36, 160 46 Z" fill="#779642" stroke="#2e3d17" stroke-width="1.7"/>
+      <path d="M 124 84 C 138 80, 151 84, 159 91 C 145 95, 132 91, 124 84 Z" fill="#59732e" stroke="#2e3d17" stroke-width="1.7"/>
+      <path d="M 144 63 C 157 61, 169 66, 175 74 C 161 76, 150 70, 144 63 Z" fill="#688538" stroke="#2e3d17" stroke-width="1.7"/>
+      <ellipse cx="122" cy="75" rx="5" ry="7" transform="rotate(-25 122 75)" fill="#3b3338" stroke="#1f1a1d" stroke-width="1.5"/>
+      <ellipse cx="141" cy="58" rx="5" ry="7" transform="rotate(-20 141 58)" fill="#3b3338" stroke="#1f1a1d" stroke-width="1.5"/>
+      <ellipse cx="156" cy="48" rx="4.6" ry="6.5" transform="rotate(-15 156 48)" fill="#3b3338" stroke="#1f1a1d" stroke-width="1.5"/>
+      <path d="M 254 108 C 236 72, 212 48, 186 39" fill="none" stroke="#425722" stroke-width="2.8" stroke-linecap="round"/>
+      <path d="M 247 92 C 258 80, 258 65, 250 56 C 243 67, 241 80, 247 92 Z" fill="#688538" stroke="#2e3d17" stroke-width="1.7"/>
+      <path d="M 234 76 C 247 61, 247 44, 237 35 C 228 48, 226 63, 234 76 Z" fill="#779642" stroke="#2e3d17" stroke-width="1.7"/>
+      <path d="M 218 59 C 229 44, 227 27, 217 18 C 210 33, 210 48, 218 59 Z" fill="#688538" stroke="#2e3d17" stroke-width="1.7"/>
+      <path d="M 200 46 C 208 31, 204 16, 193 10 C 189 23, 193 36, 200 46 Z" fill="#779642" stroke="#2e3d17" stroke-width="1.7"/>
+      <path d="M 236 84 C 222 80, 209 84, 201 91 C 215 95, 228 91, 236 84 Z" fill="#59732e" stroke="#2e3d17" stroke-width="1.7"/>
+      <path d="M 216 63 C 203 61, 191 66, 185 74 C 199 76, 210 70, 216 63 Z" fill="#688538" stroke="#2e3d17" stroke-width="1.7"/>
+      <ellipse cx="238" cy="75" rx="5" ry="7" transform="rotate(25 238 75)" fill="#3b3338" stroke="#1f1a1d" stroke-width="1.5"/>
+      <ellipse cx="219" cy="58" rx="5" ry="7" transform="rotate(20 219 58)" fill="#3b3338" stroke="#1f1a1d" stroke-width="1.5"/>
+      <ellipse cx="204" cy="48" rx="4.6" ry="6.5" transform="rotate(15 204 48)" fill="#3b3338" stroke="#1f1a1d" stroke-width="1.5"/>
+    </g>
+
+    <!-- cara -->
+    <g>
+      <line class="eyebrow-left" x1="128" y1="112" x2="162" y2="102" stroke="#1c2e10" stroke-width="4.5" stroke-linecap="round"/>
+      <line class="eyebrow-right" x1="198" y1="108" x2="232" y2="111" stroke="#1c2e10" stroke-width="4.5" stroke-linecap="round"/>
+      <g class="eye-blink">
+        <circle cx="147" cy="138" r="20" fill="#ffffff" stroke="#1c2e10" stroke-width="2.5"/>
+        <g class="pupil" data-cx="147" data-cy="138" data-max="7.5">
+          <circle cx="147" cy="139" r="9.5" fill="#182114"/><circle cx="143.5" cy="135.5" r="3" fill="#ffffff"/>
+        </g>
+        <path d="M 127 133 C 131 117, 163 117, 167 133 Z" fill="#699438" stroke="#1c2e10" stroke-width="2"/>
+        <circle cx="213" cy="138" r="20" fill="#ffffff" stroke="#1c2e10" stroke-width="2.5"/>
+        <g class="pupil" data-cx="213" data-cy="138" data-max="7.5">
+          <circle cx="213" cy="139" r="9.5" fill="#182114"/><circle cx="209.5" cy="135.5" r="3" fill="#ffffff"/>
+        </g>
+        <path d="M 193 133 C 197 117, 229 117, 233 133 Z" fill="#699438" stroke="#1c2e10" stroke-width="2"/>
+      </g>
+      <ellipse cx="122" cy="166" rx="13" ry="7.5" fill="#e0a489" opacity="0.7"/>
+      <ellipse cx="238" cy="166" rx="13" ry="7.5" fill="#e0a489" opacity="0.7"/>
+      <path id="av-mouth" d="M 168 173 Q 180 177 192 172" fill="none" stroke="#1c2e10" stroke-width="3.6" stroke-linecap="round"/>
+    </g>
+  </g>
+  </g>
+
+  <!-- brazos y manos: por delante del borde de la caja, para poder taparse los ojos -->
+  <g class="avocado-arm-left">
+    <path d="M 94 235 C 94 218, 102 206, 112 206" fill="none" stroke="#223b14" stroke-width="14" stroke-linecap="round"/>
+    <g transform="translate(114, 212)">
+      <rect x="-17" y="-13" width="34" height="27" rx="13" fill="#2d4d1b" stroke="#16260c" stroke-width="2.4"/>
+      <line x1="-8" y1="-12" x2="-8" y2="-2" stroke="#16260c" stroke-width="2" stroke-linecap="round"/>
+      <line x1="0" y1="-13" x2="0" y2="-2" stroke="#16260c" stroke-width="2" stroke-linecap="round"/>
+      <line x1="8" y1="-12" x2="8" y2="-2" stroke="#16260c" stroke-width="2" stroke-linecap="round"/>
+    </g>
+  </g>
+  <g class="avocado-arm-right">
+    <path d="M 266 235 C 266 218, 258 206, 248 206" fill="none" stroke="#223b14" stroke-width="14" stroke-linecap="round"/>
+    <g transform="translate(246, 212)">
+      <rect x="-17" y="-13" width="34" height="27" rx="13" fill="#2d4d1b" stroke="#16260c" stroke-width="2.4"/>
+      <line x1="-8" y1="-12" x2="-8" y2="-2" stroke="#16260c" stroke-width="2" stroke-linecap="round"/>
+      <line x1="0" y1="-13" x2="0" y2="-2" stroke="#16260c" stroke-width="2" stroke-linecap="round"/>
+      <line x1="8" y1="-12" x2="8" y2="-2" stroke="#16260c" stroke-width="2" stroke-linecap="round"/>
+    </g>
+  </g>
+</svg>
