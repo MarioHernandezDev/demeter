@@ -138,6 +138,7 @@ DEFAULTS = {
     "sep_min_m": 0.0,             # fusiona líneas paralelas más cercanas que esto (0 = desactivado)
     "ext_conf_min": 0.0,          # solo se prolongan los muros con confianza ≥ esto
     "ext_len_min_m": 0.0,         # … y con longitud ≥ esto
+    "k_escalon": 0.0,             # peso de la arista de muro del MDT02 (solo si hay hojas en mdt02/)
 }
 _PARAMS_FILE = Path(__file__).parent / "params.json"
 
@@ -168,7 +169,7 @@ def detectar(x0, y0, x1, y1, poly=None, img=None, dem=None, debug=False, params=
     return res
 
 
-def caracteristicas(x0, y0, x1, y1, poly=None, img=None, dem=None, escalas=(1.5, 2.5, 3.5)):
+def caracteristicas(x0, y0, x1, y1, poly=None, img=None, dem=None, escalas=(1.5, 2.5, 3.5), dem_fino="auto"):
     """Parte cara y que no depende de los umbrales: dirección de la ladera y respuestas de los filtros."""
     img = ortho(x0, y0, x1, y1) if img is None else img
     H, W = img.shape[:2]
@@ -187,6 +188,31 @@ def caracteristicas(x0, y0, x1, y1, poly=None, img=None, dem=None, escalas=(1.5,
     ux, uy = gx / gn, gy / gn                 # ladera ARRIBA en píxeles (x = columna, y = fila)
     tx, ty = -uy, ux                          # a lo largo de la curva de nivel
 
+    # relieve fino (MDT02, 2 m) si hay hojas descargadas en mdt02/: dirección más precisa + señal de escalón
+    if dem_fino == "auto":
+        import mdt_fino
+        dem_fino = mdt_fino.cargar(x0, y0, x1, y1)
+    fino = None
+    if dem_fino is not None:
+        zf, fxll, fyll, fcs = dem_fino
+        ftop = fyll + zf.shape[0] * fcs
+        FC, FR = np.broadcast_arrays((cols[None, :] - fxll) / fcs - .5, (ftop - rows[:, None]) / fcs - .5)
+        Zf = ndi.map_coordinates(zf, [FR, FC], order=1, mode="nearest")
+        Zd = ndi.gaussian_filter(Zf, 6 / PX)                    # dirección: suavizado a 6 m (sigue mejor las curvas)
+        gyf, gxf = np.gradient(Zd); gnf = np.hypot(gxf, gyf) + 1e-9
+        ux, uy = gxf / gnf, gyf / gnf; tx, ty = -uy, ux
+        fino = {"Z": Zf}
+        for sm in (1.0, 2.0):                                   # 2ª derivada ladera arriba del relieve
+            sp = sm / PX
+            zxx = ndi.gaussian_filter(Zf, sp, order=(0, 2)); zyy = ndi.gaussian_filter(Zf, sp, order=(2, 0))
+            zxy = ndi.gaussian_filter(Zf, sp, order=(1, 1))
+            zuu = (ux * ux * zxx + 2 * ux * uy * zxy + uy * uy * zyy) / PX ** 2   # m / m²
+            fino[f"borde_sup_{sm:g}m"] = np.maximum(0, -zuu)   # arista superior del muro (convexa)
+            fino[f"pie_{sm:g}m"] = np.maximum(0, zuu)          # pie del muro (cóncavo)
+        gyy, gxx = np.gradient(ndi.gaussian_filter(Zf, 1 / PX))
+        fino["pendiente_fina"] = np.hypot(gxx, gyy) / PX
+        fino["residuo"] = Zf - ndi.gaussian_filter(Zf, 8 / PX)  # escalón respecto a la ladera media
+
     # luminancia normalizada localmente
     L = img @ np.array([.3, .59, .11], np.float32)
     Lc = L - ndi.gaussian_filter(L, 40)
@@ -203,7 +229,7 @@ def caracteristicas(x0, y0, x1, y1, poly=None, img=None, dem=None, escalas=(1.5,
     Lx = ndi.gaussian_filter(L, 2.0, order=(0, 1)); Ly = ndi.gaussian_filter(L, 2.0, order=(1, 0))
     asim = np.maximum(0, ux * Lx + uy * Ly)
     return {"bbox": (x0, y0, x1, y1), "img": img, "mask": mask, "ux": ux, "uy": uy, "tx": tx, "ty": ty,
-            "ridge": ridge, "asim": asim, "H": H, "W": W, "L": L, "pendiente": gn * PX / PX ** 2}
+            "ridge": ridge, "asim": asim, "H": H, "W": W, "L": L, "pendiente": gn * PX / PX ** 2, "fino": fino}
 
 
 def decidir(F, P):
@@ -213,6 +239,12 @@ def decidir(F, P):
     ux, uy, tx, ty = F["ux"], F["uy"], F["tx"], F["ty"]
     usa_prob = "prob" in F                     # Fase 3: probabilidad del modelo entrenado
     resp = F["prob"] if usa_prob else F["ridge"] + P["k_asim"] * F["asim"]
+    if not usa_prob and F.get("fino") and P.get("k_escalon", 0) > 0:
+        # señal física del muro (arista superior en el MDT02), a la misma escala que la cresta de la ortofoto
+        e = F["fino"]["borde_sup_1m"]
+        m = F["mask"]
+        escala = (np.percentile(F["ridge"][m], 95) + 1e-9) / (np.percentile(e[m], 95) + 1e-9) if m.any() else 1
+        resp = resp + P["k_escalon"] * e * escala
 
     # difuminar a lo largo de la curva de nivel (salta huecos de árboles/sombras)
     yy, xx = np.mgrid[0:H, 0:W].astype(np.float32)

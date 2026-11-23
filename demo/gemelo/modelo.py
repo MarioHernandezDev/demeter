@@ -86,6 +86,16 @@ def caracteristicas_pixel(F) -> np.ndarray:
 
     # relieve
     add("pendiente", F["pendiente"])
+    if F.get("fino"):                                   # MDT02: la señal física del muro (escalón)
+        fz = F["fino"]
+        for k in ("borde_sup_1m", "borde_sup_2m", "pie_1m", "pie_2m", "pendiente_fina", "residuo"):
+            add(k, fz[k])
+        Zs = _g(fz["Z"], 2)
+        for d_m in (1, 2):
+            d = d_m / PX
+            arriba = ndi.map_coordinates(Zs, [yy + uy * d, xx + ux * d], order=1, mode="nearest")
+            abajo = ndi.map_coordinates(Zs, [yy - uy * d, xx - ux * d], order=1, mode="nearest")
+            add(f"salto_{d_m}m", arriba - abajo)        # desnivel en ±d metros a través de la ladera
 
     # normalizar cada característica DENTRO de la parcela (media 0, desviación 1): así el modelo no puede
     # "reconocer la parcela" por su color o su pendiente media, y tiene que aprender la forma del muro

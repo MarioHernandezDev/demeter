@@ -37,6 +37,7 @@ ESPACIO = {
     "sep_min_m": [0.0, 1.5, 2.5, 3.5],
     "ext_conf_min": [0.0, 0.6, 0.75, 0.85],
     "ext_len_min_m": [0.0, 10.0, 20.0, 40.0],
+    "k_escalon": [0.0, 0.5, 1.0, 2.0, 4.0],      # solo tiene efecto si hay MDT02 en mdt02/
 }
 
 
