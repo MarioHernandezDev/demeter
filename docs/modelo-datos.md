@@ -1,9 +1,9 @@
 # Modelo de datos — Demeter
 
-> **Versión:** 1.0
-> **Estado:** definitivo. Diseño cerrado con Alex (API), Nieto (interfaz), Mario L. (alertas) y Mario H. (datos). Cualquier cambio posterior se hace con una versión nueva y aviso al equipo
+> **Versión:** 1.1
+> **Estado:** definitivo. Diseño cerrado con Alex (API), Nieto (interfaz), Mario L. (alertas) y Mario H. (datos). Cualquier cambio posterior se hace con una versión nueva y aviso al equipo. La 1.1 cambia solo `users` (acceso con Google y registro con verificación de correo, acordado con Alex)
 > **Tarjetas:** #11 [B1] y la idea "Modelo de datos del terreno 3D"
-> **Rama:** `feature/db-modelos` · **Autor:** David · **Fecha:** 17/11/2026
+> **Rama:** `feature/db-users-v1-1` · **Autor:** David · **Fecha:** 23/11/2026
 
 Este documento describe las nueve tablas de la aplicación, cómo se relacionan y
 por qué se han diseñado así. Las tablas son el contrato que comparte todo el
@@ -13,6 +13,19 @@ Está alineado con el contrato de la API (`docs/api-contrato.md` y
 `demeter/api/schemas.py`) y con el contrato de alertas
 (`docs/alertas-contrato.md`). Donde la base de datos y la API usan nombres
 distintos, se indica en la sección 6.
+
+**Cambios respecto a la versión 1.0**
+
+- `users` admite tres formas de entrar: usuario y contraseña, registro con
+  correo verificado y cuenta de Google. Alex lo propone y el equipo lo acepta.
+- `password_hash` pasa a ser opcional (quien entra solo con Google no tiene
+  contraseña).
+- Nuevo `google_sub`, único y opcional: identificador de la cuenta de Google.
+- `email` pasa a ser obligatorio y único, y se guarda siempre en minúsculas.
+- Nuevo `email_verified`, falso hasta que se pulsa el enlace del correo.
+- Una restricción de la base de datos exige que cada usuario tenga contraseña
+  o cuenta de Google.
+- Las otras ocho tablas no cambian.
 
 **Cambios respecto a la versión 0.4**
 
@@ -88,8 +101,10 @@ erDiagram
     users {
         int id PK
         string username UK
-        string email "opcional"
-        string password_hash
+        string email UK
+        boolean email_verified
+        string password_hash "opcional"
+        string google_sub UK "opcional"
         string role
         boolean is_active
         datetime created_at
@@ -196,12 +211,29 @@ Personas que pueden entrar en la aplicación.
 | Columna | Tipo | Oblig. | Qué guarda |
 |---|---|---|---|
 | `id` | entero | Sí | Identificador único (clave primaria) |
-| `username` | texto | Sí | Nombre con el que se inicia sesión. Único |
-| `email` | texto | No | Correo de contacto |
-| `password_hash` | texto | Sí | Contraseña cifrada con bcrypt. Nunca en claro |
+| `username` | texto | Sí | Nombre con el que se inicia sesión. Único y **sin el carácter `@`**. Quien entra con Google recibe uno generado a partir de su correo |
+| `email` | texto | Sí | Correo. Único y siempre en minúsculas, para que `Ana@x.com` y `ana@x.com` no sean dos cuentas |
+| `email_verified` | booleano | Sí | Falso hasta que la persona pulsa el enlace del correo. Es independiente de `is_active` |
+| `password_hash` | texto | No | Contraseña cifrada con bcrypt. Nunca en claro. Vacío si solo entra con Google |
+| `google_sub` | texto | No | Identificador de su cuenta de Google. Único. Vacío si no usa Google |
 | `role` | texto | Sí | `admin`, `tecnico` o `lector` |
 | `is_active` | booleano | Sí | Si es falso, no puede entrar. Permite desactivar sin borrar |
 | `created_at` | fecha y hora | Sí | Fecha de alta (UTC) |
+
+**Restricción:** cada usuario debe tener `password_hash` o `google_sub` (o los
+dos). Lo impone la propia base de datos, porque un usuario sin ninguno de los
+dos no podría entrar nunca.
+
+**Reglas que cumple el código que escribe en `users`** (la base de datos no las
+comprueba):
+
+- `email` se pasa a minúsculas antes de guardar.
+- `username` no puede contener `@`. El login acepta usuario o correo en el mismo
+  campo; si un usuario pudiera llamarse como el correo de otro, los dos
+  quedarían en conflicto al entrar.
+- Las cuentas de Google se enlazan **solo por `google_sub`**, nunca por correo.
+  Si no, alguien podría registrarse con el correo de otra persona y quedarse
+  con su cuenta.
 
 ### 3.2 `parcels`
 
@@ -371,6 +403,7 @@ traducción la hace la capa de repositorio (#13):
 | `sensor_data.recorded_at` | `Reading.timestamp` | `timestamp` es palabra reservada en algunos motores, y `recorded_at` deja claro que es el momento de la medida |
 | `alerts.opened_at` | `Alert.timestamp` | La alerta tiene dos fechas (apertura y resolución); el nombre distingue cuál es |
 | `users.password_hash` | (nunca se expone) | Seguridad |
+| `users.google_sub` | (nunca se expone) | Es un identificador interno de la cuenta de Google |
 
 `alerts.resolved_at`, `value` y `threshold` se llaman igual en la base de datos
 y en la API.
@@ -381,8 +414,9 @@ y en la API.
 
 1. **Una parcela, un propietario.** Se usa `owner_id`. Los roles son globales,
    y además el propietario puede editar su parcela y su terreno.
-2. **Login con `username`.** Es lo que usan el contrato de la API y la
-   interfaz. El correo queda como dato opcional de contacto.
+2. **Se entra con `username`, y también con el correo.** Es lo que usan el
+   contrato de la API y la interfaz; el login acepta usuario o correo en el
+   mismo campo. El correo es obligatorio y único (versión 1.1).
 3. **El código del reto es la clave del sensor.** `"t001"` se guarda tal cual
    como clave primaria, sin traducción entre la API y la base de datos. Las
    claves foráneas que apuntan al sensor también son texto. Inconveniente
@@ -449,3 +483,17 @@ y en la API.
     dato y de la previsión de lluvia; un resultado guardado quedaría viejo en
     una hora. La única tabla futura prevista es `irrigation_advice`, si se
     quiere histórico de consejos.
+27. **Tres formas de entrar, un solo usuario.** Usuario y contraseña (camino
+    principal, funciona sin conexión), registro con correo verificado y
+    cuenta de Google (estos dos necesitan internet). Una misma fila de `users`
+    sirve para los tres, por eso `password_hash` y `google_sub` son opcionales.
+28. **`is_active` y `email_verified` son cosas distintas.** El primero lo decide
+    un administrador (dar de baja); el segundo lo decide el correo. Si se
+    usara `is_active` para "pendiente de verificar", un usuario dado de baja
+    podría reactivarse solo pulsando el enlace de su correo.
+29. **Google se enlaza solo por `google_sub`.** Nunca por correo, para que nadie
+    pueda quedarse con la cuenta de otra persona registrándose con su correo.
+30. **Registro abierto: siempre `lector`.** Un usuario nuevo no puede ser
+    `tecnico` ni `admin`; el rol lo sube un administrador. Que cada usuario
+    tenga sus propias parcelas queda fuera de esta versión (de momento ven las
+    de ejemplo, en solo lectura).
