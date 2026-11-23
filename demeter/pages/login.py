@@ -158,3 +158,14 @@ def login() -> rx.Component:
         ),
         barra="acceso",
     )
+
+
+@rx.page(route="/salir", title="Saliendo · Demeter", on_load=AuthState.logout)
+def salir() -> rx.Component:
+    """``/salir``: cierra la sesión y vuelve al login.
+
+    Existe para los enlaces HTML de las plantillas (p. ej. «Cerrar sesión» en Ajustes),
+    que no pueden llamar a ``AuthState.logout`` directamente.
+    """
+    return rx.el.p("Cerrando sesión…", class_name="pl-kick")
+
