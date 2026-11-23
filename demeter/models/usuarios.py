@@ -1,12 +1,8 @@
-"""Modelo de la tabla ``users`` (docs/modelo-datos.md, sección 3.1).
+"""Modelo de la tabla ``users`` (docs/modelo-datos.md, sección 3.1)."""
 
-Usamos SQLModel directamente y no ``rx.Model``: este último está deprecado
-desde Reflex 0.9.2 y se eliminará en la 1.0, así que no nos conviene
-construir toda la base de datos encima.
-"""
+from datetime import datetime
 
-from datetime import datetime, timezone
-
+import sqlalchemy as sa
 from sqlmodel import Field, SQLModel
 
 from .base import ahora_utc
@@ -15,33 +11,42 @@ from .base import ahora_utc
 class User(SQLModel, table=True):
     """Persona que puede entrar en la aplicación."""
 
-    # Nombre real de la tabla en la base de datos. Lo fijamos a mano para que
-    # coincida con el documento (``users``) y no dependa del nombre de la clase.
     __tablename__ = "users"
 
-    # Clave primaria. Es ``None`` hasta que se guarda: entonces la base de
-    # datos le asigna el número siguiente (autoincremental).
-    id: int | None = Field(default=None, primary_key=True)
+    # Un usuario sin contraseña Y sin cuenta de Google no podría entrar nunca:
+    # sería una fila inservible. La base de datos lo impide, en vez de confiar
+    # en que el código de registro nunca falle.
+    __table_args__ = (
+        sa.CheckConstraint(
+            "password_hash IS NOT NULL OR google_sub IS NOT NULL",
+            name="ck_users_tiene_credencial",
+        ),
+    )
 
-    # Con ``unique=True`` la base de datos rechaza dos usuarios con el mismo
-    # nombre, aunque falle el código de la aplicación. ``index=True`` hace que
-    # buscar por username (cada vez que alguien inicia sesión) sea rápido.
+    id: int | None = Field(default=None, primary_key=True)
     username: str = Field(unique=True, index=True)
 
-    # Opcional: el login es por username, el correo es solo de contacto.
-    email: str | None = Field(default=None)
+    # Obligatorio y único. Se guarda SIEMPRE en minúsculas (lo normaliza el
+    # código antes de guardar), porque SQLite distingue mayúsculas al comparar
+    # y "Ana@x.com" y "ana@x.com" serían dos cuentas distintas.
+    email: str = Field(unique=True, index=True)
 
-    # Nunca se guarda la contraseña, solo su huella bcrypt: aunque alguien
-    # viera la base de datos, no podría leer las contraseñas.
-    password_hash: str
+    # Falso hasta que la persona pulsa el enlace del correo. Es independiente
+    # de ``is_active``: ese lo decide un administrador (baja), este lo decide
+    # el correo. Mezclarlos permitiría que un usuario dado de baja se
+    # reactivara solo verificando su correo.
+    email_verified: bool = Field(default=False)
 
-    # ``admin`` | ``tecnico`` | ``lector``. Se valida en la aplicación; aquí
-    # es solo texto (SQLite no tiene tipo "lista cerrada").
+    # Vacío si la cuenta solo entra con Google.
+    password_hash: str | None = Field(default=None)
+
+    # Identificador estable de la cuenta de Google (el campo "sub" de su
+    # token). Las cuentas de Google se enlazan SOLO por aquí, nunca por email:
+    # si no, alguien podría registrarse con el correo de otra persona y
+    # quedarse con su cuenta. Único; vacío si no usa Google. SQLite permite
+    # varias filas con valor vacío en una columna única.
+    google_sub: str | None = Field(default=None, unique=True, index=True)
+
     role: str
-
-    # Desactivar en vez de borrar (decisión 24 del documento): así se conserva
-    # el historial. Si es False, el usuario no puede entrar.
     is_active: bool = Field(default=True)
-
-    # Fecha de alta, rellenada sola al crear el usuario.
     created_at: datetime = Field(default_factory=ahora_utc)
