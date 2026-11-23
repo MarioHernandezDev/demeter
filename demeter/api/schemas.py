@@ -87,7 +87,7 @@ class UserCreate(BaseModel):
     """Cuerpo de ``POST /api/users`` (solo admin)."""
 
     username: str = Field(min_length=1)
-    password: str = Field(min_length=8)
+    password: str = Field(min_length=8, max_length=72)  # bcrypt solo lee 72 bytes
     role: Role = "tecnico"
 
 

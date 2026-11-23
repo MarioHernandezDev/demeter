@@ -10,8 +10,15 @@ from demeter.state.types import DashboardSummary as UiDashboard  # contrato de l
 client = TestClient(api)
 
 
+_tokens: dict = {}
+
+
 def auth(role="admin"):
-    return {"Authorization": f"Bearer demo-token-{role}"}
+    """Cabecera con un token real (JWT) de uno de los usuarios de ejemplo."""
+    if role not in _tokens:
+        r = client.post("/api/auth/login", json={"username": role, "password": "demo1234"})
+        _tokens[role] = r.json()["access_token"]
+    return {"Authorization": f"Bearer {_tokens[role]}"}
 
 
 def test_health():

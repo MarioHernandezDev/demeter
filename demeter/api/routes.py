@@ -4,7 +4,7 @@ Todo devuelve datos inventados de ``sample_data``; las escrituras (POST/PUT/PATC
 entrada y devuelven lo que se «habría guardado», pero no persisten nada. Cuando exista la BD
 (B1/B6) se sustituye cada llamada a ``sample_data`` por su consulta.
 
-Permisos (se aplican ya con los tokens de ejemplo ``demo-token-admin|tecnico|lector``):
+Permisos (login real con bcrypt y JWT, ver ``auth.py``; usuarios de ejemplo hasta que haya BD):
 - lector: solo lectura.
 - tecnico: lectura + editar terreno, costes y colocar sensores.
 - admin: todo, incluidos usuarios y umbrales de sensores.
@@ -18,7 +18,9 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query
 
 from demeter.api import sample_data as d
 from demeter.api import schemas as s
+from demeter.api.auth import ADMIN, ANY, EDITOR, UserStore, authenticate, get_user_store
 from demeter.api.geo import polygon_area_m2
+from demeter.api.security import create_access_token
 
 VERSION = "0.1.0-contrato"
 INGEST_KEY = os.environ.get("DEMETER_INGEST_KEY", "demo-ingest-key")
@@ -27,28 +29,7 @@ router = APIRouter(prefix="/api")
 
 
 # ---------------------------------------------------------------- dependencias
-
-
-def current_user(authorization: Optional[str] = Header(default=None)) -> s.User:
-    token = (authorization or "").removeprefix("Bearer ").strip()
-    user = d.TOKENS.get(token)
-    if user is None:
-        raise HTTPException(401, "Falta el token o no es válido")
-    return user
-
-
-def require(*roles: str):
-    def check(user: s.User = Depends(current_user)) -> s.User:
-        if user.role not in roles:
-            raise HTTPException(403, "No tienes permiso para hacer esto")
-        return user
-
-    return check
-
-
-ANY = Depends(current_user)
-EDITOR = Depends(require("admin", "tecnico"))
-ADMIN = Depends(require("admin"))
+# (quién es el usuario y qué rol exige cada endpoint: ver demeter/api/auth.py)
 
 
 def _parcel(parcel_id: int) -> s.ParcelDetail:
@@ -74,12 +55,12 @@ def health():
 
 
 @router.post("/auth/login", response_model=s.LoginResponse, tags=["auth"])
-def login(body: s.LoginRequest):
-    """Ejemplo: usuarios ``admin``/``tecnico``/``lector`` con contraseña ``demo1234``."""
-    user = d.USERS.get(body.username)
-    if user is None or body.password != "demo1234":
+def login(body: s.LoginRequest, store: UserStore = Depends(get_user_store)):
+    """Devuelve un token JWT (caduca en 60 min). Ejemplo: ``admin`` / ``demo1234``."""
+    user = authenticate(store, body.username, body.password)
+    if user is None:
         raise HTTPException(401, "Usuario o contraseña incorrectos")
-    return s.LoginResponse(access_token=f"demo-token-{user.username}", user=user)
+    return s.LoginResponse(access_token=create_access_token(user.id), user=user)
 
 
 @router.get("/auth/me", response_model=s.User, tags=["auth"])
