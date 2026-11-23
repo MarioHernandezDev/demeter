@@ -1,6 +1,6 @@
 # Contrato del repositorio de datos (B6, #13)
 
-> **Versión:** 0.2 (borrador para revisar; usuarios adaptados a la v1.1 del modelo)
+> **Versión:** 0.3 (borrador; incorpora las respuestas de Alex del 23/11/2026)
 > **Código:** `demeter/db/repositorio.py` y `demeter/db/conexion.py` · **Pruebas:** `tests/test_repository.py`
 > **Rama:** `feature/db-repositorio` · **Autor:** David
 > **Tablas:** [`docs/modelo-datos.md`](modelo-datos.md) v1.1 · **API:** [`docs/api-contrato.md`](api-contrato.md)
@@ -64,9 +64,10 @@ No todas las funciones son una sustitución directa:
 | `readings(sensor_id, since=None, limit=100)` | `list[s.Reading]` | Las últimas `limit` lecturas posteriores a `since` (exclusivo), **de la más antigua a la más reciente**. Rellena `type` y `unit` con los del sensor |
 | `last_reading(sensor_id)` | `s.Reading \| None` | La lectura más reciente de un sensor |
 | `last_readings(parcel_id)` | `dict[str, s.Reading]` | La última lectura de cada sensor de la parcela, en una sola consulta. Sirve para el dashboard. Los sensores sin datos no aparecen |
-| `list_parcels()` | `list[s.Parcel]` | Las parcelas **activas** |
+| `list_parcels(include_inactive=False)` | `list[s.Parcel]` | Por defecto, solo las parcelas **activas**. Con `include_inactive=True`, también las desactivadas (para que un admin pueda verlas y reactivarlas) |
 | `get_parcel(parcel_id)` | `s.ParcelDetail \| None` | Una parcela con su contorno (el texto GeoJSON ya convertido a `s.Polygon`) |
 | `set_boundary(parcel_id, boundary, area_m2)` | `s.ParcelDetail \| None` | Guarda el contorno dibujado y su superficie. La superficie la calcula la API (`geo.polygon_area_m2`) y el repositorio solo la guarda |
+| `set_parcel_active(parcel_id, active)` | `s.Parcel \| None` | Da de baja (`False`) o reactiva (`True`) una parcela **y todos sus sensores**, en una sola transacción: o cambia todo o no cambia nada. `None` si la parcela no existe |
 | `parcel_sensors(parcel_id)` | `list[s.Sensor]` | Todos los sensores de la parcela, incluidos los desactivados (llevan `is_active=False`) |
 | `get_sensor(sensor_id)` | `s.Sensor \| None` | Un sensor por su código |
 | `update_sensor(sensor_id, changes)` | `s.Sensor \| None` | Cambia **solo los campos que vienen en el diccionario** `changes`: `threshold_low`, `threshold_high`, `latitude`, `longitude`, `is_active`. Un valor `None` explícito deja el campo vacío. Cualquier otra clave lanza `ValueError`. La API pasa `body.model_dump(exclude_unset=True)` |
@@ -74,7 +75,7 @@ No todas las funciones son una sustitución directa:
 ### 4.2 Alertas (entrega 2)
 
 Dependen de que el esquema `Alert` tenga `OFFLINE`, `resolved_at`, `value` y `threshold` (rama
-`feature/api-alert-campos` de Alex, aún sin mergear).
+`feature/api-alert-campos` de Alex, con PR abierto). Hasta que entre en `main`, esta entrega espera.
 
 | Función | Devuelve | Qué hace |
 |---|---|---|
@@ -112,14 +113,26 @@ Hay dos, y se importan de `demeter.db.repositorio`:
 - `NotFoundError`: una escritura apunta a algo que no existe.
 - `AlreadyExistsError`: se intenta crear algo único que ya existe (`username`, `email` o `google_sub`).
 
-## 6. Preguntas abiertas
+## 6. Preguntas abiertas y decisiones
+
+### Pendientes
 
 | Para | Pregunta |
 |---|---|
-| Alex | ¿`list_parcels()` debe ocultar las parcelas desactivadas? Propongo que sí. Y al desactivar una parcela, ¿se desactivan sus sensores? (pregunta pendiente desde el modelo de datos) |
-| Alex | `UserStore` ya está en `main` (#55) y pide `StoredUser(user: s.User, password_hash: str)`. Mis `get_user` y `get_user_by_username` devuelven `models.User`, así que hace falta una clase `DbUserStore` en `auth.py` que los convierta (cuatro líneas). ¿La escribes tú cuando entre la entrega 3? Ojo: con la v1.1 `password_hash` puede ser `None` (usuario solo de Google) y hoy `authenticate` pasaría `None` a `verify_password`, que fallaría. Habría que tratarlo como contraseña incorrecta |
 | Mario L. | ¿Bastan las seis funciones de alertas para el motor (D2) y la comprobación OFFLINE? |
-| Alex | Decisión cerrada (Google + registro con correo + verificación): las funciones de usuarios ya van con la v1.1. ¿Te encaja la firma de `create_user`, o prefieres recibir un diccionario? |
+| Mario L. y Alex | Frecuencia de lecturas: 1 por minuto (OFFLINE a 10 min, unas 600.000 lecturas en 30 días) o 1 cada 5 minutos (OFFLINE a 15 min, unas 120.000). Afecta al simulador (#15) y al histórico (#16), no a este contrato |
+
+### Cerradas (respuestas de Alex, 23/11/2026)
+
+- `get_user` y `get_user_by_username` devuelven el modelo `User` con `password_hash`.
+- `create_user` se queda como está, llamada con argumentos por nombre.
+- `DbUserStore` lo escribe Alex en `demeter/api/auth.py` cuando entre la entrega 3, y trata
+  `password_hash=None` (usuario solo de Google) como contraseña incorrecta.
+- Los esquemas de la API llevarán `email` y `email_verified`, pero **no** `google_sub`, que no
+  sale por la API.
+- `list_parcels` oculta las parcelas desactivadas salvo con `include_inactive=True`.
+- Dar de baja o reactivar una parcela arrastra a sus sensores, en el repositorio y en una
+  sola transacción (`set_parcel_active`).
 
 Este contrato se publica antes que el código para que cada uno pueda programar contra él. Si
 alguna firma no os encaja, decidlo **antes** de que se implemente.
