@@ -6,9 +6,11 @@ Qué hay ya:
 - ``logout`` y ``require_login`` (la protección de páginas) ya funcionan.
 - ``AuthState.headers`` da la cabecera ``Authorization`` para llamar a la API.
 
-Qué falta (C3, issue #30, rama ``feature/ui-login``):
-- ``login`` aún no llama a la API: necesita ``POST /api/auth/login`` (A3). Mientras
-  tanto responde con un error claro en vez de dejar entrar a cualquiera.
+- ``login`` llama a ``POST /api/auth/login`` (C3, issue #30). Hoy responde el
+  contrato de la API con usuarios de ejemplo (``admin``/``tecnico``/``lector``,
+  contraseña ``demo1234``); cuando A3 una el login con JWT la respuesta es la misma.
+
+Qué falta:
 - Comprobar que el token sigue siendo válido (si caduca, la API responde 401 y hay
   que llamar a ``logout``).
 
@@ -20,9 +22,10 @@ Cómo se usa en una página protegida::
 
 from __future__ import annotations
 
+import httpx
 import reflex as rx
 
-from demeter.state.types import Role
+from demeter.state.types import LoginResponse, Role
 
 # Rutas que usa la sesión. Si C2 cambia alguna, se cambia solo aquí.
 LOGIN_ROUTE = "/login"
@@ -110,13 +113,30 @@ class AuthState(rx.State):
         self.loading = True
         yield  # pinta «Entrando…» antes de esperar a la API
 
-        # TODO(C3 #30): llamar a POST /api/auth/login cuando exista api/auth.py (A3):
-        #   r = LoginResponse.from_api(<json de la API>)
-        #   self._open_session(r.access_token, r.user.username, r.user.role)
-        #   return rx.redirect(self._next_route())
-        # Mientras tanto nadie entra: así ninguna página privada queda abierta por error.
-        self.loading = False
-        self.error = "El inicio de sesión todavía no está conectado a la API."
+        # El backend de Reflex llama a su propia API (misma app, /api montada en él).
+        try:
+            async with httpx.AsyncClient(timeout=5) as client:
+                resp = await client.post(
+                    f"{rx.config.get_config().api_url}/api/auth/login",
+                    json={"username": username, "password": password},
+                )
+        except httpx.HTTPError:
+            self.loading = False
+            self.error = "No se puede conectar con el servidor. Inténtalo de nuevo."
+            return
+
+        if resp.status_code == 401:
+            self.loading = False
+            self.error = "Usuario o contraseña incorrectos."
+            return
+        if resp.status_code != 200:
+            self.loading = False
+            self.error = "El servidor no ha podido iniciar la sesión. Inténtalo de nuevo."
+            return
+
+        r = LoginResponse.from_api(resp.json())
+        self._open_session(r.access_token, r.user.username if r.user else username, r.user.role if r.user else "")
+        yield rx.redirect(self._next_route())
 
     @rx.event
     def logout(self):
