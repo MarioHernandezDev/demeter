@@ -17,8 +17,10 @@ Uso como script de prueba (genera una imagen de depuración):
 from __future__ import annotations
 
 import io
+import json
 import math
 import sys
+from pathlib import Path
 from urllib.request import Request, urlopen
 
 import numpy as np
@@ -123,115 +125,152 @@ def _isnum(s: str) -> bool:
         return False
 
 
+# ----------------------------------------------------------------------------- parámetros
+# Valores por defecto; `params.json` (generado por ajustar.py) los sobrescribe si existe.
+DEFAULTS = {
+    "escalas": [1.5, 2.5, 3.5],   # σ en píxeles del filtro de cresta (0,4–0,9 m de ancho de borde)
+    "k_asim": 0.0,                # peso del borde claro→oscuro ladera abajo (sombra / cara del muro)
+    "blur_m": 3.0,                # difuminado a lo largo de la curva de nivel (± metros)
+    "nms_m": 0.75,                # supresión de no-máximos a través de la pendiente (± metros) ≈ separación mínima
+    "percentil": 82,              # umbral de respuesta (percentil dentro de la parcela)
+    "min_len_m": 10.0,            # longitud mínima de un muro antes de prolongarlo
+    "align_min": 0.75,            # alineación mínima con las curvas de nivel (descarta caminos en diagonal)
+    "sep_min_m": 0.0,             # fusiona líneas paralelas más cercanas que esto (0 = desactivado)
+    "ext_conf_min": 0.0,          # solo se prolongan los muros con confianza ≥ esto
+    "ext_len_min_m": 0.0,         # … y con longitud ≥ esto
+}
+_PARAMS_FILE = Path(__file__).parent / "params.json"
+
+
+def params_actuales(over=None):
+    p = dict(DEFAULTS)
+    if _PARAMS_FILE.exists():
+        p.update(json.loads(_PARAMS_FILE.read_text(encoding="utf-8")).get("params", {}))
+    if over:
+        p.update(over)
+    return p
+
+
 # ----------------------------------------------------------------------------- detección
-def detectar(x0, y0, x1, y1, poly=None, img=None, dem=None, debug=False):
+def detectar(x0, y0, x1, y1, poly=None, img=None, dem=None, debug=False, params=None):
     """Devuelve una lista de muros [{'pts': [[x, y], ...] (UTM), 'conf': 0..1}]."""
+    P = params_actuales(params)
+    F = caracteristicas(x0, y0, x1, y1, poly=poly, img=img, dem=dem, escalas=P["escalas"])
+    res = decidir(F, P)
+    if debug:
+        return res, F
+    return res
+
+
+def caracteristicas(x0, y0, x1, y1, poly=None, img=None, dem=None, escalas=(1.5, 2.5, 3.5)):
+    """Parte cara y que no depende de los umbrales: dirección de la ladera y respuestas de los filtros."""
     img = ortho(x0, y0, x1, y1) if img is None else img
     H, W = img.shape[:2]
     z, xll, yll, cs = mdt(x0, y0, x1, y1) if dem is None else dem
-
-    # coordenadas UTM del centro de cada píxel
     cols = x0 + (np.arange(W) + .5) * PX
     rows = y1 - (np.arange(H) + .5) * PX
-    mask = np.ones((H, W), bool)
-    if poly is not None:
-        mask = _poly_mask(poly, cols, rows)
+    mask = _poly_mask(poly, cols, rows) if poly is not None else np.ones((H, W), bool)
 
-    import time
-    t0 = time.time()
-    def _t(msg):
-        if debug:
-            print(f"  {msg}: {time.time() - t0:.1f}s ({len(segs) if 'segs' in locals() else ''})")
-
-    # --- dirección de la ladera (MDT suavizado, remuestreado a la rejilla de la imagen)
-    zs = ndi.gaussian_filter(z, 2.0)                      # ~10 m
+    # dirección de la ladera (MDT suavizado, remuestreado a la rejilla de la imagen)
+    zs = ndi.gaussian_filter(z, 2.0)
     top = yll + z.shape[0] * cs
-    cc = (cols[None, :] - xll) / cs - .5
-    rr = (top - rows[:, None]) / cs - .5
-    CC, RR = np.broadcast_arrays(cc, rr)
+    CC, RR = np.broadcast_arrays((cols[None, :] - xll) / cs - .5, (top - rows[:, None]) / cs - .5)
     Z = ndi.map_coordinates(zs, [RR, CC], order=1, mode="nearest")
-    gy, gx = np.gradient(Z)                               # gy: hacia abajo en la imagen
+    gy, gx = np.gradient(Z)
     gn = np.hypot(gx, gy) + 1e-9
-    ux, uy = gx / gn, gy / gn                             # dirección de máxima pendiente (en píxeles)
-    tx, ty = -uy, ux                                      # dirección de la curva de nivel
+    ux, uy = gx / gn, gy / gn                 # ladera ARRIBA en píxeles (x = columna, y = fila)
+    tx, ty = -uy, ux                          # a lo largo de la curva de nivel
 
-    # --- imagen: luminancia, normalizada localmente (quita sombras grandes)
+    # luminancia normalizada localmente
     L = img @ np.array([.3, .59, .11], np.float32)
-    L = (L - ndi.gaussian_filter(L, 40)) / (np.sqrt(ndi.gaussian_filter((L - ndi.gaussian_filter(L, 40)) ** 2, 40)) + 1e-3)
+    Lc = L - ndi.gaussian_filter(L, 40)
+    L = Lc / (np.sqrt(ndi.gaussian_filter(Lc ** 2, 40)) + 1e-3)
 
-    # --- cresta clara a través de la pendiente: -d²L/du² (varias escalas)
-    resp = np.zeros_like(L)
-    for s in (1.5, 2.5, 3.5):                             # 0,4 – 0,9 m de ancho de borde
-        Lxx = ndi.gaussian_filter(L, s, order=(0, 2))
-        Lyy = ndi.gaussian_filter(L, s, order=(2, 0))
+    # cresta clara a través de la pendiente (−d²L/du²), máximo entre escalas
+    ridge = np.zeros_like(L)
+    for s in escalas:
+        Lxx = ndi.gaussian_filter(L, s, order=(0, 2)); Lyy = ndi.gaussian_filter(L, s, order=(2, 0))
         Lxy = ndi.gaussian_filter(L, s, order=(1, 1))
         Luu = ux * ux * Lxx + 2 * ux * uy * Lxy + uy * uy * Lyy
-        resp = np.maximum(resp, np.maximum(0, -Luu) * s * s)
+        ridge = np.maximum(ridge, np.maximum(0, -Luu) * s * s)
+    # borde asimétrico: claro arriba → oscuro abajo (cara del muro / sombra)
+    Lx = ndi.gaussian_filter(L, 2.0, order=(0, 1)); Ly = ndi.gaussian_filter(L, 2.0, order=(1, 0))
+    asim = np.maximum(0, ux * Lx + uy * Ly)
+    return {"bbox": (x0, y0, x1, y1), "img": img, "mask": mask, "ux": ux, "uy": uy, "tx": tx, "ty": ty,
+            "ridge": ridge, "asim": asim, "H": H, "W": W}
 
-    # --- difuminar a lo largo de la curva de nivel (salta huecos de árboles/sombras)
-    acc = np.zeros_like(resp)
+
+def decidir(F, P):
+    """Parte barata, dependiente de parámetros: combinar, umbralizar, trazar, unir, filtrar, prolongar."""
+    x0, y0, x1, y1 = F["bbox"]
+    H, W, mask = F["H"], F["W"], F["mask"]
+    ux, uy, tx, ty = F["ux"], F["uy"], F["tx"], F["ty"]
+    resp = F["ridge"] + P["k_asim"] * F["asim"]
+
+    # difuminar a lo largo de la curva de nivel (salta huecos de árboles/sombras)
     yy, xx = np.mgrid[0:H, 0:W].astype(np.float32)
-    n_steps, step = 10, 1.2                                # ±12 px ≈ ±3 m
-    for k in range(-n_steps, n_steps + 1):
-        acc += ndi.map_coordinates(resp, [yy + ty * k * step, xx + tx * k * step], order=1, mode="nearest")
-    S = acc / (2 * n_steps + 1)
+    n = max(1, int(round(P["blur_m"] / PX / 1.2)))
+    acc = np.zeros_like(resp)
+    for k in range(-n, n + 1):
+        acc += ndi.map_coordinates(resp, [yy + ty * k * 1.2, xx + tx * k * 1.2], order=1, mode="nearest")
+    S = acc / (2 * n + 1)
     S[~mask] = 0
 
-    # --- supresión de no-máximos a través de la pendiente → líneas de 1 px
+    # supresión de no-máximos a través de la pendiente (radio = separación mínima entre muros)
     nms = np.ones_like(S, bool)
-    for d in (1, 2, 3):
+    for d in range(1, max(2, int(round(P["nms_m"] / PX))) + 1):
         for sgn in (1, -1):
-            nb = ndi.map_coordinates(S, [yy + uy * d * sgn, xx + ux * d * sgn], order=1, mode="nearest")
-            nms &= S >= nb
+            nms &= S >= ndi.map_coordinates(S, [yy + uy * d * sgn, xx + ux * d * sgn], order=1, mode="nearest")
     vals = S[mask]
-    thr = max(np.percentile(vals, 82), 1e-6) if vals.size else 1
-    lines = nms & (S > thr) & mask
-    lines = ndi.binary_dilation(lines, iterations=1)       # une píxeles en diagonal
-    _t("filtros")
-    lines = _thin(lines)
-    _t("adelgazado")
+    thr = max(np.percentile(vals, P["percentil"]), 1e-6) if vals.size else 1
+    lines = _thin(ndi.binary_dilation(nms & (S > thr) & mask, iterations=1))
 
-    # --- trazar polilíneas
-    segs = _trace(lines)
-    segs = [s for s in segs if len(s) * PX >= 1.5]
-    _t("trazado")
-
-    # --- unir tramos alineados (mismo muro cortado por un árbol o un camino)
+    segs = [s for s in _trace(lines) if len(s) * PX >= 1.5]
     segs = _link(segs, tx, ty, ux, uy, max_gap=7 / PX, max_lat=1.2 / PX)
-    _t("unión")
 
-    # --- filtrar: largos y paralelos a las curvas de nivel
     out = []
     for s in segs:
         a = np.array(s, np.float32)
         if len(a) < 2:
             continue
-        length = np.sum(np.hypot(*np.diff(a, axis=0).T)) * PX
-        if length < 10:
+        length = float(np.sum(np.hypot(*np.diff(a, axis=0).T)) * PX)
+        if length < P["min_len_m"]:
             continue
         d = np.diff(a, axis=0); dn = np.hypot(d[:, 0], d[:, 1]) + 1e-9
         r_i, c_i = a[:-1, 0].astype(int), a[:-1, 1].astype(int)
-        align = np.abs(d[:, 1] / dn * tx[r_i, c_i] + d[:, 0] / dn * ty[r_i, c_i])
-        if np.median(align) < 0.75:                        # camino en diagonal, no muro
+        align = float(np.median(np.abs(d[:, 1] / dn * tx[r_i, c_i] + d[:, 0] / dn * ty[r_i, c_i])))
+        if align < P["align_min"]:
             continue
-        strength = float(np.mean(S[a[:, 0].astype(int), a[:, 1].astype(int)]) / (thr * 3))
-        out.append({"rc": a, "conf": float(min(1, .5 * min(1, strength) + .5 * np.median(align))), "len": length})
+        fuerza = float(np.mean(S[a[:, 0].astype(int), a[:, 1].astype(int)]) / (thr * 3))
+        out.append({"rc": a, "conf": float(min(1, .5 * min(1, fuerza) + .5 * align)), "len": length,
+                    "score": fuerza * length})
 
-    # --- prolongar extremos hasta el borde del terreno o hasta otro muro
+    # fusionar paralelas: se queda la más fuerte; descarta las que corren pegadas a ella
+    if P["sep_min_m"] > 0 and out:
+        sep = max(1, int(round(P["sep_min_m"] / PX)))
+        ocup = np.zeros((H, W), bool); keep = []
+        for o in sorted(out, key=lambda o: -o["score"]):
+            linea = np.zeros((H, W), bool); _raster(linea, o["rc"])
+            if linea.any() and ocup[linea].mean() >= .6:
+                continue
+            keep.append(o)
+            ocup |= ndi.binary_dilation(linea, iterations=sep)
+        out = keep
+
+    # prolongar extremos (solo los muros fiables) hasta el borde del terreno o hasta otro muro
     occ = np.zeros((H, W), np.int32)
     for k, o in enumerate(out, 1):
         tmp = np.zeros((H, W), bool); _raster(tmp, o["rc"]); occ[tmp] = k
     occ = ndi.maximum_filter(occ, size=5)
     for k, o in enumerate(out, 1):
-        o["rc"] = _extend(o["rc"], mask, occ, tx, ty, max_px=200 / PX, own_id=k)
+        if o["conf"] >= P["ext_conf_min"] and o["len"] >= P["ext_len_min_m"]:
+            o["rc"] = _extend(o["rc"], mask, occ, tx, ty, max_px=200 / PX, own_id=k)
 
     res = []
     for o in out:
         rc = _rdp(o["rc"], 1.5)
-        pts = [[float(x0 + (c + .5) * PX), float(y1 - (r + .5) * PX)] for r, c in rc]
-        res.append({"pts": pts, "conf": round(o["conf"], 2)})
-    if debug:
-        return res, {"img": img, "S": S, "mask": mask, "lines": lines}
+        res.append({"pts": [[float(x0 + (c + .5) * PX), float(y1 - (r + .5) * PX)] for r, c in rc],
+                    "conf": round(o["conf"], 2)})
     return res
 
 
@@ -434,6 +473,4 @@ if __name__ == "__main__":
         xy = [((x - x0) / PX, (y1 - y) / PX) for x, y in m["pts"]]
         dr.line(xy, fill=(255, 140, 0) if m["conf"] >= .7 else (255, 235, 59), width=3)
     im.save(out)
-    S = dbg["S"]; Sm = (255 * S / (np.percentile(S, 99.5) + 1e-9)).clip(0, 255).astype(np.uint8)
-    Image.fromarray(Sm).save(out.replace(".png", "_resp.png"))
     print("guardado", out)
