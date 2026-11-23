@@ -28,7 +28,7 @@ Role = Literal["admin", "tecnico", "lector"]
 SensorType = Literal[
     "temperatura", "humedad_suelo", "luminosidad", "humedad_ambiente", "nivel_deposito"
 ]
-AlertType = Literal["LOW", "HIGH"]
+AlertType = Literal["LOW", "HIGH", "OFFLINE"]
 SensorStatus = Literal["ok", "LOW", "HIGH", "sin_datos"]
 ZoneType = Literal["crop", "no_crop"]
 ElementType = Literal["tree", "terrace", "path"]
@@ -184,14 +184,21 @@ class IngestResult(BaseModel):
 
 
 class Alert(BaseModel):
-    """Alerta generada cuando una lectura sale de sus umbrales."""
+    """Alerta abierta por el motor de alertas (reglas en ``docs/alertas-contrato.md``).
+
+    Dos ejes independientes: activa/resuelta (``resolved_at``, lo decide el sistema) y
+    sin leer/leída (``acknowledged``, lo decide la persona).
+    """
 
     id: int
     sensor_id: str
-    timestamp: datetime
+    timestamp: datetime  # cuándo se abrió
     type: AlertType
     message: str
     acknowledged: bool = False
+    resolved_at: Optional[datetime] = None  # nulo = sigue activa
+    value: Optional[float] = None  # lectura que la abrió (nulo en OFFLINE)
+    threshold: Optional[float] = None  # umbral vigente en ese momento (nulo en OFFLINE)
 
 
 class AlertUpdate(BaseModel):

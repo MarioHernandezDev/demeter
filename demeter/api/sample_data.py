@@ -18,8 +18,8 @@ from demeter.api.geo import offset, polygon_area_m2, rectangle
 _LAT1, _LON1 = 36.7174, -3.4301
 _LAT2, _LON2 = 36.7452, -3.5101
 
-_STEP = timedelta(minutes=15)
-_HISTORY = timedelta(days=7)
+_STEP = timedelta(minutes=1)  # un sensor envía una lectura por minuto (OFFLINE salta a los 10 min)
+_HISTORY = timedelta(days=1)
 
 _next_id = itertools.count(100)  # ids de los elementos «creados» por los endpoints de ejemplo
 
@@ -147,7 +147,7 @@ _TANKS = [
 def _value(sensor_id: str, t: datetime, now: datetime) -> float:
     """Valor de ejemplo de un sensor en el instante ``t`` (curvas suaves y deterministas)."""
     hour = t.hour + t.minute / 60
-    progress = 1 - (now - t) / _HISTORY  # 0 hace 7 días → 1 ahora
+    progress = 1 - (now - t) / _HISTORY  # 0 hace 24 h → 1 ahora
     if sensor_id.startswith("t"):  # temperatura: ciclo diario, máxima por la tarde
         return 22 + 6 * math.sin(2 * math.pi * (hour - 9) / 24)
     if sensor_id.startswith("a"):  # humedad ambiente: contraria a la temperatura
@@ -166,9 +166,9 @@ def _value(sensor_id: str, t: datetime, now: datetime) -> float:
 
 
 def readings(sensor: s.Sensor) -> list[s.Reading]:
-    """Últimos 7 días de lecturas cada 15 minutos, de la más antigua a la más reciente."""
+    """Últimas 24 h de lecturas, una por minuto, de la más antigua a la más reciente."""
     now = utc_now()
-    last = now - timedelta(minutes=now.minute % 15, seconds=now.second)
+    last = now - timedelta(seconds=now.second)
     n = int(_HISTORY / _STEP)
     out = []
     for i in range(n, -1, -1):
@@ -213,9 +213,12 @@ def alerts(parcel_id: Optional[int] = None) -> list[s.Alert]:
     now = utc_now()
     all_alerts = [
         s.Alert(id=1, sensor_id="h001", timestamp=now - timedelta(hours=2), type="LOW",
-                message="Humedad del suelo por debajo del umbral (25 %)"),
+                message="24,2 % por debajo del umbral (25 %)", value=24.2, threshold=25.0),
         s.Alert(id=2, sensor_id="t001", timestamp=now - timedelta(days=1, hours=3), type="HIGH",
-                message="Temperatura por encima del umbral (35 ºC)", acknowledged=True),
+                message="36 ºC por encima del umbral (35 ºC)", value=36.0, threshold=35.0,
+                acknowledged=True, resolved_at=now - timedelta(days=1, hours=1)),
+        s.Alert(id=3, sensor_id="l001", timestamp=now - timedelta(hours=30), type="OFFLINE",
+                message="Sin datos desde hace más de 10 min", resolved_at=now - timedelta(hours=29)),
     ]
     if parcel_id is None:
         return all_alerts
