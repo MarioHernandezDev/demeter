@@ -30,7 +30,7 @@ Se cargan desde Google Fonts (`theme.GOOGLE_FONTS`); si no hay red, caen a las f
 | Pieza | Dónde | Qué hace |
 |---|---|---|
 | Barra y pestañas | `demeter/components/layout.py` (Reflex) | Sección activa con `aria-current`, alertas sin leer (`UIState`), usuario y «Salir» (`AuthState`). Tres variantes: `app`, `portada` y `acceso`. En móvil (≤ 760 px) la navegación pasa a una píldora de cuatro pestañas abajo. |
-| Login | `demeter/pages/login.py` (Reflex) | Formulario con el diseño del prototipo que ya envía a `AuthState.login` (C3 #30 lo conecta a la API). |
+| Login | `demeter/pages/login.py` (Reflex) + `assets/login/` | Variante «Aurora» del prototipo de login: fondo WebGL (`fondo.js`), caja de cristal y Demetreo, que llega corriendo, sigue el usuario con los ojos y se tapa los ojos con la contraseña (`demetreo.js`). El formulario envía a `AuthState.login` (C3 #30 lo conecta a la API). |
 | Contenido de cada pantalla | `demeter/pages/plantillas/*.html` | Maqueta del prototipo con datos de ejemplo, insertada con `prototipo.contenido()`. |
 | Estilos, scripts e imágenes | `assets/proto/` | `proto.css`, `app.css` y `mascota.css`; `intro.js` (portada: niebla y bancal en líneas con Three.js), `twin.js` (gemelo 3D del panel), `app.js` (gráficas, mapa, alertas y umbrales de ejemplo) y `mascota.js` (Demetreo griego: pie, aviso y 404). |
 
