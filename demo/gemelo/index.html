@@ -13,7 +13,7 @@
   header h1 { font-size: 15px; margin: 0 10px 0 0; color: #9ccc65; }
   button { background: #2e7d32; color: #fff; border: 0; padding: 6px 10px; border-radius: 5px; cursor: pointer; font-size: 13px; }
   button.sec { background: #37474f; }
-  button.on { outline: 2px solid #9ccc65; background: #455a64; }
+  button.on { outline: 2px solid #ffb300; background: #4e5b31; }
   button:disabled { opacity: .4; cursor: default; }
   label { font-size: 13px; display: flex; gap: 5px; align-items: center; }
   main { flex: 1; display: flex; min-height: 0; }
@@ -22,14 +22,11 @@
   #info { position: absolute; left: 10px; top: 10px; background: #000b; padding: 8px 10px; border-radius: 6px; font-size: 12px; max-width: 330px; line-height: 1.45; pointer-events: none; }
   #status { font-size: 12px; color: #b0bec5; }
   .sep { width: 1px; height: 22px; background: #3a444d; }
-  #edit { position: absolute; right: 10px; top: 10px; background: #000d; padding: 10px; border-radius: 6px; font-size: 13px; line-height: 1.6; }
+  #edit { position: absolute; right: 10px; top: 10px; background: #000d; padding: 10px 12px; border-radius: 6px; font-size: 13px; line-height: 1.7; width: 250px; }
+  #edit input[type=number] { width: 80px; background: #263238; color: #fff; border: 1px solid #546e7a; border-radius: 4px; padding: 3px 5px; font-size: 14px; }
   #edit button { padding: 3px 9px; margin-right: 4px; }
-  #tools { position: absolute; left: 50%; transform: translateX(-50%); bottom: 12px; background: #000c; padding: 8px 10px; border-radius: 8px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; justify-content: center; max-width: 96%; }
-  #tools button { padding: 5px 9px; }
-  #tools label { font-size: 12px; }
-  #tools input[type=range] { width: 80px; }
   #tip { position: absolute; pointer-events: none; background: #000d; color: #ffe082; padding: 3px 7px; border-radius: 4px; font-size: 12px; white-space: nowrap; }
-  #help { position: absolute; right: 10px; bottom: 120px; background: #000a; padding: 6px 9px; border-radius: 6px; font-size: 11px; line-height: 1.5; color: #cfd8dc; max-width: 260px; pointer-events: none; }
+  #help { position: absolute; left: 10px; bottom: 10px; background: #000a; padding: 6px 9px; border-radius: 6px; font-size: 11px; line-height: 1.55; color: #cfd8dc; max-width: 330px; pointer-events: none; }
 </style>
 <script type="importmap">
 { "imports": {
@@ -42,14 +39,11 @@
 <header>
   <h1>Demeter · Gemelo digital (demo)</h1>
   <button id="bParcela">1 · Dibujar mi terreno</button>
-  <button id="bGenerar">2 · Generar 3D</button>
+  <button id="bGenerar">2 · Generar plano</button>
   <span class="sep"></span>
-  <label>Muro <input id="muro" type="range" min="0.5" max="3" step="0.25" value="1.5"><span id="muroV">1,5 m</span></label>
-  <label title="Cuánto se suaviza el relieve antes de escalonarlo: bajo = muros sinuosos, alto = muros rectos">Suavizado <input id="suav" type="range" min="2" max="15" step="1" value="4"><span id="suavV">4 m</span></label>
-  <label><input id="talud" type="checkbox"> Talud de tierra</label>
-  <button id="bTodo" class="sec" disabled>Bancalizar todo</button>
-  <button id="bZona" class="sec" disabled>Bancalizar zona</button>
-  <button id="bLiso" class="sec" disabled>Zona lisa</button>
+  <button id="bMuro" class="sec" disabled>3 · Dibujar muro</button>
+  <button id="bBorrar" class="sec" disabled>Borrar muro</button>
+  <label title="Desnivel que se pone automáticamente entre dos bancales vecinos">Altura de muro <input id="muro" type="range" min="0.5" max="3" step="0.25" value="1.5"><span id="muroV">1,5 m</span></label>
   <button id="bDeshacer" class="sec" disabled title="Ctrl+Z">Deshacer</button>
   <span class="sep"></span>
   <button id="bModo" class="sec" disabled>Ver: gemelo</button>
@@ -63,17 +57,10 @@
     <div id="info">Aún no hay gemelo generado.</div>
     <div id="edit" hidden></div>
     <div id="tip" hidden></div>
-    <div id="help" hidden></div>
-    <div id="tools" hidden>
-      <button data-tool="mover" class="sec on" title="Arrastra un bancal arriba/abajo · Alt+clic en un muro = fusionar">✋ Mover bancal</button>
-      <button data-tool="subir" class="sec" title="Shift invierte">⬆ Subir</button>
-      <button data-tool="bajar" class="sec" title="Shift invierte">⬇ Bajar</button>
-      <button data-tool="aplanar" class="sec">▬ Aplanar</button>
-      <button data-tool="suavizar" class="sec">≈ Suavizar</button>
-      <button data-tool="muro" class="sec" title="Traza una línea que cruce el bancal">┃ Muro</button>
-      <span class="sep"></span>
-      <label>Tamaño <input id="bSize" type="range" min="1" max="20" step="0.5" value="5"><span id="bSizeV">5 m</span></label>
-      <label>Fuerza <input id="bForce" type="range" min="1" max="10" step="1" value="5"></label>
+    <div id="help" hidden>
+      <b>Mapa</b>: «Dibujar muro» → clic a lo largo del borde de cada muro que veas en la ortofoto (haz zoom para más precisión); doble clic para terminar. El muro debe ir de borde a borde del terreno o hasta otro muro.<br>
+      <b>3D</b>: clic en un bancal para seleccionarlo · arrastra arriba/abajo para cambiar su altura · o escríbela exacta en el panel.<br>
+      <b>Ctrl+Z</b>: deshacer.
     </div>
   </div>
 </main>
@@ -89,30 +76,50 @@ proj4.defs('EPSG:25830', '+proj=utm +zone=30 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0
 const toUTM = ll => proj4('EPSG:4326', 'EPSG:25830', [ll.lng, ll.lat]);
 const $ = id => document.getElementById(id);
 const fmt = n => Math.round(n).toLocaleString('es-ES');
-const fm = n => n.toFixed(2).replace('.', ',');
+const fm = n => (Math.round(n * 100) / 100).toFixed(2).replace('.', ',');
 const status = t => $('status').textContent = t;
 const N4 = [[1, 0], [-1, 0], [0, 1], [0, -1]];
 
 // ---------- Mapa 2D ----------
-const map = L.map('map').setView([36.7585, -3.5300], 16);
+const map = L.map('map', { maxZoom: 21 }).setView([36.7585, -3.5300], 16);
 const pnoa = L.tileLayer('https://www.ign.es/wmts/pnoa-ma?service=WMTS&request=GetTile&version=1.0.0&Format=image/jpeg&layer=OI.OrthoimageCoverage&style=default&tilematrixset=GoogleMapsCompatible&TileMatrix={z}&TileRow={y}&TileCol={x}',
-  { maxZoom: 20, maxNativeZoom: 19, attribution: 'PNOA cedido por © <a href="https://www.ign.es">Instituto Geográfico Nacional</a>' }).addTo(map);
-const osm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' });
+  { maxZoom: 21, maxNativeZoom: 19, attribution: 'PNOA cedido por © <a href="https://www.ign.es">Instituto Geográfico Nacional</a>' }).addTo(map);
+const osm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 21, maxNativeZoom: 19, attribution: '© OpenStreetMap' });
 const catastro = L.tileLayer.wms('https://ovc.catastro.meh.es/Cartografia/WMS/ServidorWMS.aspx', {
-  layers: 'Catastro', format: 'image/png', transparent: true, maxZoom: 20, attribution: '© Dirección General del Catastro' });
+  layers: 'Catastro', format: 'image/png', transparent: true, maxZoom: 21, attribution: '© Dirección General del Catastro' });
 L.control.layers({ 'Ortofoto PNOA': pnoa, 'OpenStreetMap': osm }, { 'Lindes del Catastro': catastro }).addTo(map);
 L.control.scale({ imperial: false }).addTo(map);
 const parcelaLayer = new L.FeatureGroup().addTo(map);
-const zonasLayer = new L.FeatureGroup().addTo(map);
+const murosLayer = new L.FeatureGroup().addTo(map);
 
-// ---------- Dibujo en el mapa: clic = vértice · doble clic / Enter / clic en el primero / volver a pulsar = cerrar · Esc = cancelar ----------
-const DRAW = { parcela: { btn: 'bParcela', color: '#9ccc65' }, bancal: { btn: 'bZona', color: '#ffb300' }, liso: { btn: 'bLiso', color: '#4fc3f7' } };
-let mode = null, pts = [], temp = null, lastClick = 0;
+// ---------- Geometría ----------
+function areaUTM(p) { let a = 0; for (let i = 0; i < p.length; i++) { const [x1, y1] = p[i], [x2, y2] = p[(i + 1) % p.length]; a += x1 * y2 - x2 * y1; } return Math.abs(a) / 2; }
+function inside(x, y, p) { let c = false; for (let i = 0, j = p.length - 1; i < p.length; j = i++) { const [xi, yi] = p[i], [xj, yj] = p[j]; if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) c = !c; } return c; }
+// curva suave (Catmull-Rom) que pasa por los puntos clicados → muros curvos con pocos clics
+function catmull(P, perSeg = 12) {
+  if (P.length < 3) return P.slice();
+  const out = [];
+  for (let i = 0; i < P.length - 1; i++) {
+    const p0 = P[Math.max(0, i - 1)], p1 = P[i], p2 = P[i + 1], p3 = P[Math.min(P.length - 1, i + 2)];
+    for (let s = 0; s < perSeg; s++) {
+      const t = s / perSeg, t2 = t * t, t3 = t2 * t;
+      out.push([0, 1].map(k => .5 * (2 * p1[k] + (-p0[k] + p2[k]) * t + (2 * p0[k] - 5 * p1[k] + 4 * p2[k] - p3[k]) * t2 + (-p0[k] + 3 * p1[k] - 3 * p2[k] + p3[k]) * t3)));
+    }
+  }
+  out.push(P[P.length - 1]);
+  return out;
+}
+const llCurve = ll => catmull(ll.map(p => [p.lat, p.lng])).map(([a, b]) => L.latLng(a, b));
+
+// ---------- Dibujo en el mapa ----------
+const DRAW = { parcela: { btn: 'bParcela', color: '#9ccc65' }, muro: { btn: 'bMuro', color: '#ffb300' } };
+let mode = null, pts = [], temp = null, lastClick = 0, borrando = false;
 function startDraw(kind) {
-  cancelDraw(); mode = kind;
+  cancelDraw(); setBorrar(false); mode = kind;
   map.doubleClickZoom.disable(); map.getContainer().style.cursor = 'crosshair';
   $(DRAW[kind].btn).classList.add('on');
-  status('Clic para añadir vértices; doble clic o clic en el primero para cerrar. Esc cancela.');
+  status(kind === 'parcela' ? 'Clic para añadir vértices; doble clic o clic en el primero para cerrar. Esc cancela.'
+    : 'Clic a lo largo del borde del muro (la curva se suaviza sola). Doble clic o Enter para terminar. Esc cancela.');
 }
 function cancelDraw() {
   if (temp) map.removeLayer(temp); temp = null; mode = null; pts = [];
@@ -121,37 +128,309 @@ function cancelDraw() {
 }
 function finishDraw() {
   const kind = mode, ll = pts.slice(); cancelDraw();
-  if (ll.length < 3) return;
-  if (kind === 'parcela') {
-    parcelaLayer.clearLayers(); zonasLayer.clearLayers();
-    parcelaLayer.addLayer(L.polygon(ll, { color: DRAW.parcela.color, weight: 3, fillOpacity: .06 }));
-    status(`Terreno dibujado: ${fmt(areaUTM(ll.map(toUTM)))} m². Pulsa «Generar 3D».`);
-  } else addZona(kind, ll);
+  if (kind === 'parcela' && ll.length >= 3) {
+    parcelaLayer.clearLayers(); murosLayer.clearLayers();
+    parcelaLayer.addLayer(L.polygon(ll, { color: DRAW.parcela.color, weight: 3, fillOpacity: .04 }));
+    status(`Terreno dibujado: ${fmt(areaUTM(ll.map(toUTM)))} m². Pulsa «Generar plano».`);
+  } else if (kind === 'muro' && ll.length >= 2) {
+    addMuro(ll);
+    startDraw('muro');                              // seguir dibujando muros seguidos
+  }
 }
 map.on('click', e => {
   if (!mode) return;
   const now = Date.now(), dbl = now - lastClick < 350 && pts.length && map.latLngToContainerPoint(pts[pts.length - 1]).distanceTo(e.containerPoint) < 8;
   lastClick = now;
   if (dbl) return finishDraw();
-  if (pts.length >= 3 && map.latLngToContainerPoint(pts[0]).distanceTo(e.containerPoint) < 12) return finishDraw();
+  if (mode === 'parcela' && pts.length >= 3 && map.latLngToContainerPoint(pts[0]).distanceTo(e.containerPoint) < 12) return finishDraw();
   pts.push(e.latlng);
   if (temp) map.removeLayer(temp);
   const c = DRAW[mode].color;
-  temp = (pts.length >= 3 ? L.polygon(pts, { color: c, dashArray: '5 5', fillOpacity: .05 }) : L.polyline(pts, { color: c, dashArray: '5 5' })).addTo(map);
+  temp = mode === 'parcela' && pts.length >= 3 ? L.polygon(pts, { color: c, dashArray: '5 5', fillOpacity: .05 }).addTo(map)
+    : L.polyline(mode === 'muro' ? llCurve(pts) : pts, { color: c, weight: 4, dashArray: '6 6' }).addTo(map);
 });
 map.on('dblclick', () => { if (mode) finishDraw(); });
-for (const k of Object.keys(DRAW)) $(DRAW[k].btn).onclick = () => mode === k ? finishDraw() : startDraw(k);
+$('bParcela').onclick = () => mode === 'parcela' ? finishDraw() : startDraw('parcela');
+$('bMuro').onclick = () => mode === 'muro' ? (pts.length >= 2 ? finishDraw() : cancelDraw()) : startDraw('muro');
+function setBorrar(on) {
+  borrando = on; $('bBorrar').classList.toggle('on', on);
+  if (on) { cancelDraw(); status('Clic sobre un muro del mapa para borrarlo. Vuelve a pulsar «Borrar muro» para salir.'); }
+}
+$('bBorrar').onclick = () => setBorrar(!borrando);
 
-// ---------- Geometría ----------
-function areaUTM(p) { let a = 0; for (let i = 0; i < p.length; i++) { const [x1, y1] = p[i], [x2, y2] = p[(i + 1) % p.length]; a += x1 * y2 - x2 * y1; } return Math.abs(a) / 2; }
-function inside(x, y, p) { let c = false; for (let i = 0, j = p.length - 1; i < p.length; j = i++) { const [xi, yi] = p[i], [xj, yj] = p[j]; if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) c = !c; } return c; }
-function boxBlur(src, nx, ny, rad, passes) {
-  let a = Float32Array.from(src), b = new Float32Array(a.length);
-  for (let p = 0; p < passes; p++) {
-    for (let r = 0; r < ny; r++) for (let c = 0; c < nx; c++) { let s = 0, n = 0; for (let k = -rad; k <= rad; k++) { const cc = c + k; if (cc >= 0 && cc < nx) { s += a[r * nx + cc]; n++; } } b[r * nx + c] = s / n; }
-    for (let r = 0; r < ny; r++) for (let c = 0; c < nx; c++) { let s = 0, n = 0; for (let k = -rad; k <= rad; k++) { const rr = r + k; if (rr >= 0 && rr < ny) { s += b[rr * nx + c]; n++; } } a[r * nx + c] = s / n; }
+// =====================================================================================
+// MODELO: plano llano + muros dibujados → regiones (bancales) → alturas
+//   altura automática: escalón de «Altura de muro» entre vecinos; el relieve real (MDT) solo decide qué lado es el alto
+//   altura manual: lo que el usuario fija (arrastrando o escribiendo) manda sobre la automática
+// =====================================================================================
+let G = null;
+
+function addMuro(ll) {
+  if (!G) return status('Primero genera el plano.');
+  pushUndo();
+  G.muros.push({ ll: ll.map(p => L.latLng(p.lat, p.lng)) });
+  rebuild();
+  const n = G.regions.length;
+  status(`${G.muros.length} muro(s) · ${n} bancal(es).` + (G.lastWallUseless ? ' ⚠ El último muro no separa nada: llévalo de borde a borde o hasta otro muro.' : ''));
+}
+function drawMurosOnMap() {
+  murosLayer.clearLayers();
+  G.muros.forEach((m, k) => {
+    const pl = L.polyline(llCurve(m.ll), { color: DRAW.muro.color, weight: 4 }).addTo(murosLayer);
+    pl.on('click', ev => {
+      if (!borrando) return;
+      L.DomEvent.stop(ev);
+      pushUndo(); G.muros.splice(k, 1); rebuild(); status('Muro borrado.');
+    });
+  });
+}
+
+function rebuild() {
+  const { nx, ny, res, x0, y1, mask, raw } = G, N = nx * ny;
+  // 1) rasterizar muros (curva suavizada, prolongada 1,5 m en cada extremo para que "enganche" con bordes y otros muros)
+  const barrier = new Uint8Array(N);
+  const before = G.regions ? G.regions.length : 1;
+  for (const m of G.muros) {
+    const P = catmull(m.ll.map(toUTM), 16);
+    const ext = (a, b) => { const dx = a[0] - b[0], dy = a[1] - b[1], L0 = Math.hypot(dx, dy) || 1; return [a[0] + dx / L0 * 1.5, a[1] + dy / L0 * 1.5]; };
+    if (P.length >= 2) { P.unshift(ext(P[0], P[1])); P.push(ext(P[P.length - 1], P[P.length - 2])); }
+    for (let k = 0; k < P.length - 1; k++) {
+      const [ax, ay] = P[k], [bx, by] = P[k + 1], n = Math.ceil(Math.hypot(bx - ax, by - ay) / (res * .3)) + 1;
+      for (let s = 0; s <= n; s++) {
+        const c = Math.round((ax + (bx - ax) * s / n - x0) / res), r = Math.round((y1 - (ay + (by - ay) * s / n)) / res);
+        if (c >= 0 && r >= 0 && c < nx && r < ny) barrier[r * nx + c] = 1;
+      }
+    }
   }
-  return a;
+  // 2) regiones = trozos del terreno separados por muros
+  const label = new Int32Array(N).fill(-1), regions = [];
+  for (let s0 = 0; s0 < N; s0++) {
+    if (!mask[s0] || barrier[s0] || label[s0] >= 0) continue;
+    const id = regions.length, cells = [s0]; label[s0] = id; let sum = 0;
+    for (let q = 0; q < cells.length; q++) { const i = cells[q], c = i % nx, r = (i / nx) | 0; sum += raw[i];
+      for (const [dc, dr] of N4) { const cc = c + dc, rr = r + dr; if (cc < 0 || rr < 0 || cc >= nx || rr >= ny) continue;
+        const j = rr * nx + cc; if (mask[j] && !barrier[j] && label[j] < 0) { label[j] = id; cells.push(j); } } }
+    regions.push({ cells, mean: sum / cells.length, h: 0 });
+  }
+  // trozos diminutos (< 3 m²) → se tratan como parte del muro
+  const minCells = Math.ceil(3 / (res * res));
+  for (const R of regions) if (R.cells.length < minCells) for (const i of R.cells) { barrier[i] = 1; label[i] = -1; }
+  const keep = regions.filter(R => R.cells.length >= minCells), remap = new Map();
+  keep.forEach((R, k) => remap.set(regions.indexOf(R), k));
+  for (let i = 0; i < N; i++) if (label[i] >= 0) label[i] = remap.has(label[i]) ? remap.get(label[i]) : -1;
+  // 3) vecindad a través de los muros
+  const adj = keep.map(() => new Set());
+  for (let i = 0; i < N; i++) if (barrier[i] && mask[i]) {
+    const c = i % nx, r = (i / nx) | 0, ls = new Set();
+    for (let dr = -2; dr <= 2; dr++) for (let dc = -2; dc <= 2; dc++) { const cc = c + dc, rr = r + dr; if (cc >= 0 && rr >= 0 && cc < nx && rr < ny && label[rr * nx + cc] >= 0) ls.add(label[rr * nx + cc]); }
+    for (const a of ls) for (const b of ls) if (a !== b) adj[a].add(b);
+  }
+  // 4) alturas automáticas: escalones desde el bancal más bajo (según el relieve real)
+  const step = +$('muro').value, done = new Uint8Array(keep.length);
+  const order = keep.map((R, k) => k).sort((a, b) => keep[a].mean - keep[b].mean);
+  for (const root of order) {
+    if (done[root]) continue;
+    keep[root].h = 0; done[root] = 1; const q = [root];
+    while (q.length) { const a = q.shift();
+      for (const b of adj[a]) if (!done[b]) { keep[b].h = keep[a].h + step * (keep[b].mean >= keep[a].mean ? 1 : -1); done[b] = 1; q.push(b); } }
+  }
+  const hMin = Math.min(0, ...keep.map(R => R.h)); keep.forEach(R => R.h -= hMin);
+  // 5) alturas fijadas a mano (guardadas por una celda "semilla" de cada bancal)
+  for (const R of keep) R.manual = false;
+  for (const [cell, h] of G.manualH) { const l = label[cell]; if (l >= 0) { keep[l].h = h; keep[l].manual = true; } }
+  // 6) superficie final: plataformas planas, muros verticales (la celda de muro toma la altura del bancal más alto que toca)
+  const z = new Float32Array(N), base = keep.length ? Math.min(...keep.map(R => R.h)) : 0;
+  for (let i = 0; i < N; i++) z[i] = label[i] >= 0 ? keep[label[i]].h : base;
+  for (let i = 0; i < N; i++) if (barrier[i] && mask[i]) {
+    const c = i % nx, r = (i / nx) | 0; let best = -Infinity;
+    for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) { const cc = c + dc, rr = r + dr; if (cc >= 0 && rr >= 0 && cc < nx && rr < ny) { const l = label[rr * nx + cc]; if (l >= 0) best = Math.max(best, keep[l].h); } }
+    if (best > -Infinity) z[i] = best;
+  }
+  G.lastWallUseless = G.muros.length > 0 && keep.length <= before;
+  let zmax = 0; for (let i = 0; i < N; i++) if (z[i] > zmax) zmax = z[i];
+  Object.assign(G, { barrier, label, regions: keep, z, zmax });
+  if (G.sel !== null && G.sel >= keep.length) G.sel = null;
+  drawMurosOnMap(); updateMesh(); infoText(); editPanel();
+  $('bDeshacer').disabled = !G.undo.length;
+}
+
+// fijar la altura de un bancal (y opcionalmente desplazar igual todos los que están por encima)
+function setRegionHeight(l, h, conArriba) {
+  const R = G.regions[l], d = h - R.h;
+  const afectados = conArriba ? G.regions.map((Q, k) => k).filter(k => k === l || G.regions[k].h > R.h + 1e-6) : [l];
+  for (const k of afectados) {
+    const Q = G.regions[k];
+    for (const cell of [...G.manualH.keys()]) if (G.label[cell] === k) G.manualH.delete(cell);
+    G.manualH.set(Q.cells[Q.cells.length >> 1], Q.h + d);
+  }
+}
+
+// ---------- Deshacer ----------
+function pushUndo() {
+  G.undo.push({ muros: G.muros.map(m => ({ ll: m.ll.slice() })), manualH: new Map(G.manualH) });
+  if (G.undo.length > 50) G.undo.shift();
+  $('bDeshacer').disabled = false;
+}
+function undo() {
+  const s = G && G.undo.pop(); if (!s) return;
+  G.muros = s.muros; G.manualH = s.manualH; G.sel = null; rebuild(); status('Deshecho.');
+}
+$('bDeshacer').onclick = undo;
+addEventListener('keydown', e => {
+  if (mode) { if (e.key === 'Enter') finishDraw(); if (e.key === 'Escape') { cancelDraw(); status('Dibujo terminado.'); } return; }
+  if (e.target.tagName === 'INPUT' && e.target.type === 'number') return;
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); undo(); }
+});
+$('muro').oninput = e => { $('muroV').textContent = (+e.target.value).toString().replace('.', ',') + ' m'; if (G) rebuild(); };
+
+// =====================================================================================
+// VISTA 3D
+// =====================================================================================
+const view = $('view'), info = $('info'), edit = $('edit'), tip = $('tip');
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(devicePixelRatio); view.insertBefore(renderer.domElement, view.firstChild);
+const scene = new THREE.Scene(); scene.background = new THREE.Color(0xa9c9e8);
+const camera = new THREE.PerspectiveCamera(45, 1, .5, 20000);
+const controls = new OrbitControls(camera, renderer.domElement); controls.enableDamping = true;
+scene.add(new THREE.HemisphereLight(0xffffff, 0x556b2f, 1.1));
+const sun = new THREE.DirectionalLight(0xfff2d6, 1.6); sun.position.set(-300, 500, 300); scene.add(sun);
+function resize() { const w = view.clientWidth, h = view.clientHeight; renderer.setSize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix(); }
+addEventListener('resize', resize); resize();
+(function loop() { requestAnimationFrame(loop); controls.update(); renderer.render(scene, camera); })();
+
+let mesh = null, showGemelo = true, useOrtho = true, orthoTex = null, idxMap = null, gridCol = null;
+const curZ = () => showGemelo ? G.z : G.rawRel;
+
+function buildMesh() {
+  if (mesh) { scene.remove(mesh); mesh.geometry.dispose(); mesh.material.dispose(); }
+  const { nx, ny, res } = G;
+  let geo = new THREE.PlaneGeometry((nx - 1) * res, (ny - 1) * res, nx - 1, ny - 1).rotateX(-Math.PI / 2);
+  idxMap = null;
+  if (!useOrtho) { idxMap = geo.index.array.slice(); geo = geo.toNonIndexed(); }
+  geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(geo.attributes.position.count * 3), 3));
+  gridCol = new Float32Array(nx * ny * 3);
+  mesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: !useOrtho, map: useOrtho ? orthoTex : null }));
+  scene.add(mesh); updateMesh();
+}
+function updateMesh() {
+  if (!mesh) return;
+  const { nx, ny, res, mask } = G, Z = curZ(), ex = +$('exag').value, sel = showGemelo ? G.sel : null;
+  for (let r = 0; r < ny; r++) for (let c = 0; c < nx; c++) {
+    const i = r * nx + c; let R, Gc, B;
+    if (useOrtho) { R = Gc = B = 1; }
+    else {
+      const h = Z[i]; let g = 0;
+      if (c > 0) g = Math.max(g, Math.abs(Z[i - 1] - h)); if (c < nx - 1) g = Math.max(g, Math.abs(Z[i + 1] - h));
+      if (r > 0) g = Math.max(g, Math.abs(Z[i - nx] - h)); if (r < ny - 1) g = Math.max(g, Math.abs(Z[i + nx] - h));
+      g /= res;
+      if (g < .35) [R, Gc, B] = [.47, .62, .30]; else if (g < 1) [R, Gc, B] = [.62, .52, .36]; else [R, Gc, B] = [.66, .64, .6];
+    }
+    if (showGemelo && G.barrier[i] && mask[i] && !useOrtho) [R, Gc, B] = [.66, .64, .6];
+    if (sel !== null && G.label[i] === sel) { R = R * .55 + .45; Gc = Gc * .55 + .38; B *= .3; }
+    const k = mask[i] ? 1 : .38;
+    gridCol[i * 3] = R * k; gridCol[i * 3 + 1] = Gc * k; gridCol[i * 3 + 2] = B * k;
+  }
+  const pos = mesh.geometry.attributes.position, col = mesh.geometry.attributes.color;
+  if (idxMap) {
+    for (let k = 0; k < idxMap.length; k++) { const i = idxMap[k]; pos.array[k * 3 + 1] = Z[i] * ex; col.array.set(gridCol.subarray(i * 3, i * 3 + 3), k * 3); }
+  } else {
+    for (let i = 0; i < nx * ny; i++) pos.array[i * 3 + 1] = Z[i] * ex;
+    col.array.set(gridCol); mesh.geometry.computeVertexNormals();
+  }
+  pos.needsUpdate = true; col.needsUpdate = true; mesh.geometry.computeBoundingSphere();
+}
+
+// intersección rayo–terreno sobre la rejilla
+const ray = new THREE.Raycaster();
+function heightAtWorld(x, z) {
+  const { nx, ny, res } = G, W = (nx - 1) * res, H = (ny - 1) * res, Z = curZ();
+  const c = (x + W / 2) / res, r = (z + H / 2) / res;
+  if (c < 0 || r < 0 || c > nx - 1 || r > ny - 1) return null;
+  const c0 = Math.min(nx - 2, c | 0), r0 = Math.min(ny - 2, r | 0), fc = c - c0, fr = r - r0;
+  return ((Z[r0 * nx + c0] * (1 - fc) + Z[r0 * nx + c0 + 1] * fc) * (1 - fr) + (Z[(r0 + 1) * nx + c0] * (1 - fc) + Z[(r0 + 1) * nx + c0 + 1] * fc) * fr) * +$('exag').value;
+}
+function hitTerrain(e) {
+  if (!G || !mesh) return null;
+  const rect = renderer.domElement.getBoundingClientRect();
+  ray.setFromCamera(new THREE.Vector2((e.clientX - rect.left) / rect.width * 2 - 1, -(e.clientY - rect.top) / rect.height * 2 + 1), camera);
+  const o = ray.ray.origin, d = ray.ray.direction, W = (G.nx - 1) * G.res / 2, H = (G.ny - 1) * G.res / 2;
+  const ymax = (Math.max(G.zmax || 0, G.hmax - G.hmin) + 5) * +$('exag').value + 5;
+  let t0 = 0, t1 = 1e5;
+  for (const [oo, dd, lo, hi] of [[o.x, d.x, -W, W], [o.y, d.y, -5, ymax], [o.z, d.z, -H, H]]) {
+    if (Math.abs(dd) < 1e-9) { if (oo < lo || oo > hi) return null; continue; }
+    let a = (lo - oo) / dd, b = (hi - oo) / dd; if (a > b) [a, b] = [b, a];
+    t0 = Math.max(t0, a); t1 = Math.min(t1, b);
+  }
+  if (t0 > t1) return null;
+  let prev = t0;
+  for (let t = t0; t <= t1; t += G.res * .5) {
+    const y = o.y + d.y * t, h = heightAtWorld(o.x + d.x * t, o.z + d.z * t);
+    if (h !== null && y <= h) {
+      let a = prev, b = t;
+      for (let k = 0; k < 10; k++) { const m = (a + b) / 2, hm = heightAtWorld(o.x + d.x * m, o.z + d.z * m); if (hm !== null && o.y + d.y * m <= hm) b = m; else a = m; }
+      const c = Math.round((o.x + d.x * b + W) / G.res), r = Math.round((o.z + d.z * b + H) / G.res);
+      return { c, r, i: r * G.nx + c };
+    }
+    prev = t;
+  }
+  return null;
+}
+
+// ---------- Selección y arrastre de bancales en el 3D ----------
+let drag = null, downPos = null;
+const el = renderer.domElement;
+el.addEventListener('pointerdown', e => {
+  downPos = [e.clientX, e.clientY];
+  if (e.button !== 0 || !G || !showGemelo) return;
+  const hit = hitTerrain(e); if (!hit) return;
+  const l = G.label[hit.i]; if (l === undefined || l < 0) return;
+  drag = { l, y0: e.clientY, h0: G.regions[l].h, moved: false, undoPushed: false };
+  G.sel = l; controls.enabled = false; updateMesh(); editPanel();
+  el.setPointerCapture(e.pointerId);
+});
+el.addEventListener('pointermove', e => {
+  if (!drag) return;
+  const d = Math.round((drag.y0 - e.clientY) / 5) * .1;    // 5 px = 10 cm
+  if (d === 0 && !drag.moved) return;
+  if (!drag.undoPushed) { pushUndo(); drag.undoPushed = true; }
+  drag.moved = true;
+  const target = Math.round((drag.h0 + d) * 100) / 100;
+  if (Math.abs(target - G.regions[drag.l].h) > 1e-6) { setRegionHeight(drag.l, target, $('conArriba') ? $('conArriba').checked : true); rebuild(); }
+  tip.hidden = false; tip.style.left = (e.offsetX + 14) + 'px'; tip.style.top = (e.offsetY - 10) + 'px';
+  tip.textContent = `${fm(target)} m (${d >= 0 ? '+' : ''}${fm(d)})`;
+});
+el.addEventListener('pointerup', e => {
+  const clickLike = downPos && Math.hypot(e.clientX - downPos[0], e.clientY - downPos[1]) < 4;
+  if (drag) { drag = null; tip.hidden = true; controls.enabled = true; editPanel(); return; }
+  if (clickLike && G && G.sel !== null) { G.sel = null; updateMesh(); editPanel(); }
+});
+
+// ---------- Paneles ----------
+function infoText() {
+  const { area, hmin, hmax, mdtRes, regions, res } = G;
+  const hs = regions.map(R => R.h), span = hs.length ? Math.max(...hs) - Math.min(...hs) : 0;
+  info.innerHTML = `<b>Terreno propio</b>: ${fmt(area)} m² (${(area / 1e4).toFixed(2).replace('.', ',')} ha)<br>` +
+    `<b>${regions.length} bancal(es)</b> · ${G.muros.length} muro(s) · desnivel total ${fm(span)} m<br>` +
+    `<span style="color:#90a4ae">Relieve real (MDT IGN ${mdtRes} m): ${fm(hmax - hmin)} m de desnivel — solo se usa para saber qué lado de cada muro es el alto.</span>`;
+}
+let conArribaPref = true;
+function editPanel() {
+  if (!G || G.sel === null || !G.regions[G.sel]) { edit.hidden = true; return; }
+  const l = G.sel, R = G.regions[l];
+  edit.hidden = false;
+  edit.innerHTML = `<b>Bancal</b> ${R.manual ? '<span style="color:#ffe082">(ajustado a mano)</span>' : '<span style="color:#90a4ae">(automático)</span>'}<br>
+    Superficie: ${fmt(R.cells.length * G.res * G.res)} m²<br>
+    Altura: <input id="eH" type="number" step="0.05" value="${R.h.toFixed(2)}"> m<br>
+    <button id="eDn" class="sec">−10 cm</button><button id="eUp" class="sec">+10 cm</button><br>
+    <label><input id="conArriba" type="checkbox" ${conArribaPref ? 'checked' : ''}> Mover también los bancales de arriba</label>
+    <button id="eAuto" class="sec">Volver a automático</button>`;
+  const apply = h => { if (!isFinite(h)) return; pushUndo(); setRegionHeight(l, Math.round(h * 100) / 100, $('conArriba').checked); rebuild(); };
+  $('eH').onchange = e => apply(parseFloat(e.target.value.replace(',', '.')));
+  $('eH').onkeydown = e => { if (e.key === 'Enter') e.target.blur(); };
+  $('eUp').onclick = () => apply(R.h + .1);
+  $('eDn').onclick = () => apply(R.h - .1);
+  $('conArriba').onchange = e => conArribaPref = e.target.checked;
+  $('eAuto').onclick = () => { pushUndo(); for (const cell of [...G.manualH.keys()]) if (G.label[cell] === l) G.manualH.delete(cell); rebuild(); };
 }
 
 // ---------- Datos del IGN (a través del proxy local: server.py) ----------
@@ -188,8 +467,8 @@ function sampler(m) {
 }
 async function loadOrtho(x0, y0, x1, y1) {
   const W = x1 - x0, H = y1 - y0;
-  for (const max of [2048, 1024, 512]) {
-    const px = Math.min(max, Math.round(Math.max(W, H) * 4));
+  for (const max of [4096, 2048, 1024]) {
+    const px = Math.min(max, Math.round(Math.max(W, H) * 6));
     const url = `/proxy/pnoa-wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=OI.OrthoimageCoverage&STYLES=&CRS=EPSG:25830&BBOX=${x0},${y0},${x1},${y1}&WIDTH=${Math.round(px * W / Math.max(W, H))}&HEIGHT=${Math.round(px * H / Math.max(W, H))}&FORMAT=image/jpeg`;
     try {
       const blob = await (await fetchRetry(url, 2)).blob();
@@ -202,476 +481,23 @@ async function loadOrtho(x0, y0, x1, y1) {
   return null;
 }
 
-// =====================================================================================
-// MODELO DEL GEMELO
-//   base   = relieve real + zonas (bancalizado automático / zonas lisas)   → se recalcula al cambiar zonas o suavizado
-//   capa manual = offsets por bancal (arrastrar), bancales creados con «Muro», y "edit" (pinceles, metro a metro)
-//   z final = base (con offsets) + edit
-// =====================================================================================
-let G = null;
-const MANUAL = 1e6;                      // ids ≥ 1e6 = bancales creados a mano con la herramienta Muro
-const compOf = l => l >= MANUAL ? G.manual[l - MANUAL] : G.base.comps[l];
-
-function smoothFor(rm) {
-  const rad = Math.max(1, Math.round(rm / G.res));
-  if (!G.smoothCache.has(rad)) G.smoothCache.set(rad, boxBlur(G.raw, G.nx, G.ny, rad, 3));
-  return G.smoothCache.get(rad);
-}
-
-function nivelesZona(zone, Zm, smooth) {
-  const { nx, ny, res } = G, step = zone.step, lev = new Int32Array(nx * ny);
-  for (const i of zone.cells) lev[i] = Math.round(smooth[i] / step);
-  for (let pass = 0; pass < 2; pass++) {               // filtro de mayoría 3×3 → bordes limpios
-    const out = Int32Array.from(lev);
-    for (const i of zone.cells) {
-      const c = i % nx, r = (i / nx) | 0, cnt = new Map();
-      for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
-        const cc = c + dc, rr = r + dr; if (cc < 0 || rr < 0 || cc >= nx || rr >= ny) continue;
-        const j = rr * nx + cc; if (Zm[j]) cnt.set(lev[j], (cnt.get(lev[j]) || 0) + 1);
-      }
-      let best = lev[i], bn = 0; for (const [k, v] of cnt) if (v > bn) { bn = v; best = k; }
-      if (bn >= 5) out[i] = best;
-    }
-    for (const i of zone.cells) lev[i] = out[i];
-  }
-  const minCells = Math.max(4, Math.round(12 / (res * res)));   // plataformas < 12 m² → se funden con la vecina
-  for (let it = 0; it < 3; it++) {
-    const lab = new Uint8Array(nx * ny); let changed = false;
-    for (const s0 of zone.cells) {
-      if (lab[s0]) continue;
-      const cells = [s0]; lab[s0] = 1;
-      for (let q = 0; q < cells.length; q++) { const i = cells[q], c = i % nx, r = (i / nx) | 0;
-        for (const [dc, dr] of N4) { const cc = c + dc, rr = r + dr; if (cc < 0 || rr < 0 || cc >= nx || rr >= ny) continue;
-          const j = rr * nx + cc; if (Zm[j] && !lab[j] && lev[j] === lev[i]) { lab[j] = 1; cells.push(j); } } }
-      if (cells.length >= minCells) continue;
-      const cnt = new Map();
-      for (const i of cells) { const c = i % nx, r = (i / nx) | 0;
-        for (const [dc, dr] of N4) { const cc = c + dc, rr = r + dr; if (cc < 0 || rr < 0 || cc >= nx || rr >= ny) continue;
-          const j = rr * nx + cc; if (Zm[j] && lev[j] !== lev[i]) cnt.set(lev[j], (cnt.get(lev[j]) || 0) + 1); } }
-      let best = null, bn = 0; for (const [k, v] of cnt) if (v > bn) { bn = v; best = k; }
-      if (best !== null) { for (const i of cells) lev[i] = best; changed = true; }
-    }
-    if (!changed) break;
-  }
-  return lev;
-}
-
-function computeBase() {
-  const { nx, ny, raw } = G, label = new Int32Array(nx * ny).fill(-1), comps = [], talud = new Uint8Array(nx * ny);
-  const smooth = smoothFor(G.suav);
-  for (const zone of G.zonas) {
-    const Zm = new Uint8Array(nx * ny); for (const i of zone.cells) Zm[i] = 1;
-    if (zone.type === 'liso') {
-      const hs = zone.cells.map(i => raw[i]).sort((a, b) => a - b);
-      const id = comps.length; comps.push({ h0: hs[hs.length >> 1], type: 'liso' });
-      for (const i of zone.cells) label[i] = id;
-    } else {
-      const lev = nivelesZona(zone, Zm, smooth), seen = new Uint8Array(nx * ny);
-      for (const s0 of zone.cells) {
-        if (seen[s0]) continue;
-        const id = comps.length, cells = [s0]; seen[s0] = 1;
-        for (let q = 0; q < cells.length; q++) { const i = cells[q], c = i % nx, r = (i / nx) | 0;
-          for (const [dc, dr] of N4) { const cc = c + dc, rr = r + dr; if (cc < 0 || rr < 0 || cc >= nx || rr >= ny) continue;
-            const j = rr * nx + cc; if (Zm[j] && !seen[j] && lev[j] === lev[i]) { seen[j] = 1; cells.push(j); } } }
-        comps.push({ h0: lev[s0] * zone.step, type: 'bancal' });
-        for (const i of cells) label[i] = id;
-      }
-      if (zone.talud) for (const i of zone.cells) talud[i] = 1;
-    }
-  }
-  G.base = { label, comps, talud };
-}
-
-function compose() {
-  const { nx, ny, raw, base, override, edit } = G, z = Float32Array.from(raw), label = new Int32Array(nx * ny), counts = new Map();
-  for (let i = 0; i < nx * ny; i++) {
-    const l = override[i] >= 0 ? override[i] : base.label[i];
-    label[i] = l;
-    if (l >= 0) { z[i] = compOf(l).h0 + (G.offsets.get(l) || 0); counts.set(l, (counts.get(l) || 0) + 1); }
-  }
-  if (base.talud.some(v => v)) {                         // talud de tierra: suaviza solo junto a los muros
-    const bl = boxBlur(z, nx, ny, 1, 2);
-    for (let i = 0; i < nx * ny; i++) if (base.talud[i]) {
-      const c = i % nx, r = (i / nx) | 0;
-      for (const [dc, dr] of N4) { const cc = c + dc, rr = r + dr; if (cc >= 0 && rr >= 0 && cc < nx && rr < ny && label[rr * nx + cc] !== label[i]) { z[i] = bl[i]; break; } }
-    }
-  }
-  for (let i = 0; i < nx * ny; i++) z[i] += edit[i];
-  G.z = z; G.label = label; G.counts = counts;
-}
-
-// ---------- Deshacer (Ctrl+Z) ----------
-function pushUndo() {
-  G.undo.push({ zonas: G.zonas.length, suav: G.suav, offsets: new Map(G.offsets), edit: G.edit.slice(), override: G.override.slice(), manual: G.manual.map(m => ({ ...m })) });
-  if (G.undo.length > 30) G.undo.shift();
-  $('bDeshacer').disabled = false;
-}
-function undo() {
-  const s = G && G.undo.pop(); if (!s) return;
-  let rebase = s.suav !== G.suav;
-  while (G.zonas.length > s.zonas) { const z = G.zonas.pop(); if (z.layer) zonasLayer.removeLayer(z.layer); rebase = true; }
-  G.suav = s.suav; $('suav').value = s.suav; $('suavV').textContent = s.suav + ' m';
-  Object.assign(G, { offsets: s.offsets, edit: s.edit, override: s.override, manual: s.manual });
-  if (rebase) computeBase();
-  G.sel = null; compose(); updateMesh(); infoText(); editPanel();
-  $('bDeshacer').disabled = !G.undo.length; status('Deshecho.');
-}
-$('bDeshacer').onclick = undo;
-addEventListener('keydown', e => {
-  if (mode) { if (e.key === 'Enter') finishDraw(); if (e.key === 'Escape') cancelDraw(); return; }
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); undo(); }
-});
-
-// ---------- Zonas ----------
-function addZona(type, ll) {
-  if (!G) return status('Primero genera el 3D.');
-  const P = ll.map(toUTM), cells = [];
-  for (let r = 0; r < G.ny; r++) for (let c = 0; c < G.nx; c++) { const i = r * G.nx + c; if (G.mask[i] && inside(G.x0 + c * G.res, G.y1 - r * G.res, P)) cells.push(i); }
-  if (!cells.length) return status('La zona no cae dentro de tu terreno.');
-  pushUndo();
-  const layer = L.polygon(ll, { color: DRAW[type].color, weight: 2, fillOpacity: .12 }).addTo(zonasLayer);
-  G.zonas.push({ type, cells, layer, step: +$('muro').value, talud: $('talud').checked });
-  // la zona nueva manda sobre los retoques manuales previos dentro de ella
-  for (const i of cells) { G.override[i] = -1; G.edit[i] = 0; }
-  rebuildAll();
-}
-$('bTodo').onclick = () => {
-  if (!G) return;
-  pushUndo();
-  const cells = []; for (let i = 0; i < G.nx * G.ny; i++) if (G.mask[i]) cells.push(i);
-  G.zonas.push({ type: 'bancal', cells, layer: null, step: +$('muro').value, talud: $('talud').checked });
-  G.override.fill(-1); G.edit.fill(0); G.offsets.clear();
-  rebuildAll();
-};
-function rebuildAll() {
-  computeBase(); compose(); G.sel = null;
-  showGemelo = true; $('bModo').textContent = 'Ver: gemelo';
-  updateMesh(); infoText(); editPanel();
-  status(G.zonas.length ? `${nBancales()} bancales. Usa las herramientas de abajo para retocar.` : 'Relieve real. Elige muro y suavizado y pulsa «Bancalizar todo» o «Bancalizar zona».');
-}
-const nBancales = () => [...G.counts.keys()].filter(l => compOf(l).type === 'bancal').length;
-
-// ---------- Suavizado en vivo ----------
-let suavTimer = null;
-$('suav').oninput = e => {
-  $('suavV').textContent = e.target.value + ' m';
-  if (!G) return;
-  clearTimeout(suavTimer);
-  suavTimer = setTimeout(() => {
-    if (+e.target.value === G.suav) return;
-    pushUndo();
-    G.suav = +e.target.value; G.offsets.clear();   // los bancales cambian de forma: los desplazamientos por bancal ya no aplican
-    G.override.fill(-1);
-    rebuildAll();
-  }, 120);
-};
-
-// =====================================================================================
-// VISTA 3D
-// =====================================================================================
-const view = $('view'), info = $('info'), edit = $('edit'), tip = $('tip'), help = $('help');
-const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setPixelRatio(devicePixelRatio); view.insertBefore(renderer.domElement, view.firstChild);
-const scene = new THREE.Scene(); scene.background = new THREE.Color(0xa9c9e8);
-const camera = new THREE.PerspectiveCamera(45, 1, 1, 20000);
-const controls = new OrbitControls(camera, renderer.domElement); controls.enableDamping = true;
-scene.add(new THREE.HemisphereLight(0xffffff, 0x556b2f, 1.1));
-const sun = new THREE.DirectionalLight(0xfff2d6, 1.6); sun.position.set(-300, 500, 300); scene.add(sun);
-function resize() { const w = view.clientWidth, h = view.clientHeight; renderer.setSize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix(); }
-addEventListener('resize', resize); resize();
-
-// cursor del pincel y trazo del muro
-const ring = new THREE.Mesh(new THREE.RingGeometry(.9, 1, 64).rotateX(-Math.PI / 2),
-  new THREE.MeshBasicMaterial({ color: 0xffeb3b, transparent: true, opacity: .9, depthTest: false }));
-ring.renderOrder = 10; ring.visible = false; scene.add(ring);
-const muroLine = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: 0xff9800, depthTest: false }));
-muroLine.renderOrder = 11; scene.add(muroLine);
-
-let mesh = null, showGemelo = true, useOrtho = true, orthoTex = null, idxMap = null, gridCol = null, dirty = false;
-
-function buildMesh() {
-  if (mesh) { scene.remove(mesh); mesh.geometry.dispose(); mesh.material.dispose(); }
-  const { nx, ny, res } = G;
-  let geo = new THREE.PlaneGeometry((nx - 1) * res, (ny - 1) * res, nx - 1, ny - 1).rotateX(-Math.PI / 2);
-  idxMap = null;
-  if (!useOrtho) { idxMap = geo.index.array.slice(); geo = geo.toNonIndexed(); }  // low-poly: caras planas
-  geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(geo.attributes.position.count * 3), 3));
-  gridCol = new Float32Array(nx * ny * 3);
-  mesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: !useOrtho, map: useOrtho ? orthoTex : null }));
-  scene.add(mesh);
-  updateMesh();
-}
-function updateMesh() {
-  if (!mesh) return;
-  const { nx, ny, res, mask, raw, hmin } = G, Z = showGemelo ? G.z : raw, ex = +$('exag').value, sel = showGemelo ? G.sel : null;
-  for (let r = 0; r < ny; r++) for (let c = 0; c < nx; c++) {
-    const i = r * nx + c; let R, Gc, B;
-    if (useOrtho) { R = Gc = B = 1; }
-    else {   // color por pendiente local: plano = cultivo · talud = tierra · muro = piedra
-      const h = Z[i]; let g = 0;
-      if (c > 0) g = Math.max(g, Math.abs(Z[i - 1] - h)); if (c < nx - 1) g = Math.max(g, Math.abs(Z[i + 1] - h));
-      if (r > 0) g = Math.max(g, Math.abs(Z[i - nx] - h)); if (r < ny - 1) g = Math.max(g, Math.abs(Z[i + nx] - h));
-      g /= res;
-      if (g < .35) [R, Gc, B] = [.47, .62, .30]; else if (g < 1) [R, Gc, B] = [.62, .52, .36]; else [R, Gc, B] = [.66, .64, .6];
-    }
-    if (sel !== null && G.label[i] === sel) { R = R * .55 + .45; Gc = Gc * .55 + .38; B *= .3; }
-    const k = mask[i] ? 1 : .38;
-    gridCol[i * 3] = R * k; gridCol[i * 3 + 1] = Gc * k; gridCol[i * 3 + 2] = B * k;
-  }
-  const pos = mesh.geometry.attributes.position, col = mesh.geometry.attributes.color;
-  if (idxMap) {
-    for (let k = 0; k < idxMap.length; k++) { const i = idxMap[k]; pos.array[k * 3 + 1] = (Z[i] - hmin) * ex; col.array.set(gridCol.subarray(i * 3, i * 3 + 3), k * 3); }
-  } else {
-    for (let i = 0; i < nx * ny; i++) pos.array[i * 3 + 1] = (Z[i] - hmin) * ex;
-    col.array.set(gridCol);
-    mesh.geometry.computeVertexNormals();
-  }
-  pos.needsUpdate = true; col.needsUpdate = true;
-  mesh.geometry.computeBoundingSphere();
-}
-
-// intersección rayo–terreno por "ray marching" sobre la rejilla (mucho más rápido que el raycast por triángulos)
-const ray = new THREE.Raycaster();
-function heightAtWorld(x, z) {
-  const { nx, ny, res, hmin } = G, W = (nx - 1) * res, H = (ny - 1) * res, Z = showGemelo ? G.z : G.raw;
-  const c = (x + W / 2) / res, r = (z + H / 2) / res;
-  if (c < 0 || r < 0 || c > nx - 1 || r > ny - 1) return null;
-  const c0 = Math.min(nx - 2, c | 0), r0 = Math.min(ny - 2, r | 0), fc = c - c0, fr = r - r0;
-  const h = (Z[r0 * nx + c0] * (1 - fc) + Z[r0 * nx + c0 + 1] * fc) * (1 - fr) + (Z[(r0 + 1) * nx + c0] * (1 - fc) + Z[(r0 + 1) * nx + c0 + 1] * fc) * fr;
-  return (h - hmin) * +$('exag').value;
-}
-function hitTerrain(e) {
-  if (!G || !mesh) return null;
-  const rect = renderer.domElement.getBoundingClientRect();
-  ray.setFromCamera(new THREE.Vector2((e.clientX - rect.left) / rect.width * 2 - 1, -(e.clientY - rect.top) / rect.height * 2 + 1), camera);
-  const o = ray.ray.origin, d = ray.ray.direction, W = (G.nx - 1) * G.res / 2, H = (G.ny - 1) * G.res / 2;
-  const ymax = (G.hmax - G.hmin + 20) * +$('exag').value + 5;
-  let t0 = 0, t1 = 1e5;
-  for (const [oo, dd, lo, hi] of [[o.x, d.x, -W, W], [o.y, d.y, -20, ymax], [o.z, d.z, -H, H]]) {
-    if (Math.abs(dd) < 1e-9) { if (oo < lo || oo > hi) return null; continue; }
-    let a = (lo - oo) / dd, b = (hi - oo) / dd; if (a > b) [a, b] = [b, a];
-    t0 = Math.max(t0, a); t1 = Math.min(t1, b);
-  }
-  if (t0 > t1) return null;
-  const step = G.res * .5;
-  let prev = t0;
-  for (let t = t0; t <= t1; t += step) {
-    const x = o.x + d.x * t, y = o.y + d.y * t, z = o.z + d.z * t, h = heightAtWorld(x, z);
-    if (h !== null && y <= h) {
-      let a = prev, b = t;
-      for (let k = 0; k < 10; k++) { const m = (a + b) / 2, hm = heightAtWorld(o.x + d.x * m, o.z + d.z * m); if (hm !== null && o.y + d.y * m <= hm) b = m; else a = m; }
-      const X = o.x + d.x * b, Zw = o.z + d.z * b;
-      const c = Math.round((X + W) / G.res), r = Math.round((Zw + H) / G.res);
-      return { x: X, y: o.y + d.y * b, z: Zw, c, r, i: r * G.nx + c };
-    }
-    prev = t;
-  }
-  return null;
-}
-
-// =====================================================================================
-// HERRAMIENTAS DE RETOQUE
-// =====================================================================================
-const HELP = {
-  mover: '<b>Mover bancal</b>: arrastra un bancal hacia arriba o abajo (pasos de 0,25 m).<br><b>Alt + clic</b> en un muro: fusiona los dos bancales.<br>Arrastrar fuera del terreno o con botón derecho: girar cámara.',
-  subir: '<b>Subir</b>: mantén pulsado y pinta. <b>Shift</b> = bajar.',
-  bajar: '<b>Bajar</b>: mantén pulsado y pinta. <b>Shift</b> = subir.',
-  aplanar: '<b>Aplanar</b>: deja la zona a la altura del punto donde empiezas a pintar.',
-  suavizar: '<b>Suavizar</b>: elimina picos y escalones raros.',
-  muro: '<b>Muro</b>: traza una línea que cruce un bancal de lado a lado. La parte de abajo baja la altura de «Muro» y queda como bancal independiente.',
-};
-let tool = 'mover';
-document.querySelectorAll('#tools [data-tool]').forEach(b => b.onclick = () => {
-  tool = b.dataset.tool;
-  document.querySelectorAll('#tools [data-tool]').forEach(x => x.classList.toggle('on', x === b));
-  help.innerHTML = HELP[tool] + '<br><b>Ctrl+Z</b>: deshacer.';
-  ring.visible = false;
-});
-$('bSize').oninput = e => $('bSizeV').textContent = (+e.target.value).toString().replace('.', ',') + ' m';
-
-let drag = null, stroke = null, lastHit = null, downPos = null, lastFrame = performance.now();
-
-const el = renderer.domElement;
-el.addEventListener('pointerdown', e => {
-  downPos = [e.clientX, e.clientY];
-  if (e.button !== 0 || !G || !showGemelo) return;
-  const hit = hitTerrain(e); if (!hit || hit.i < 0 || hit.i >= G.nx * G.ny) return;
-  if (tool === 'mover') {
-    const l = G.label[hit.i];
-    if (e.altKey) return fusionar(hit);
-    if (l < 0) return;
-    pushUndo();
-    drag = { l, y0: e.clientY, off0: G.offsets.get(l) || 0, moved: false };
-    G.sel = l; controls.enabled = false; updateMesh(); editPanel();
-  } else {
-    pushUndo();
-    controls.enabled = false;
-    stroke = { tool, target: G.z[hit.i], path: [hit], shift: e.shiftKey };
-    lastHit = hit;
-  }
-  el.setPointerCapture(e.pointerId);
-});
-el.addEventListener('pointermove', e => {
-  if (!G) return;
-  if (drag) {
-    const d = Math.round((drag.y0 - e.clientY) / 6) * .25;   // 6 px = 0,25 m
-    if (d !== 0) drag.moved = true;
-    G.offsets.set(drag.l, drag.off0 + d); dirty = true;
-    const C = compOf(drag.l);
-    tip.hidden = false; tip.style.left = (e.offsetX + 14) + 'px'; tip.style.top = (e.offsetY - 10) + 'px';
-    tip.textContent = `${fm(C.h0 + drag.off0 + d)} m (${d >= 0 ? '+' : ''}${fm(d)})`;
-    return;
-  }
-  if (tool === 'mover') { ring.visible = false; return; }
-  const hit = hitTerrain(e);
-  ring.visible = !!hit;
-  if (hit) { const R = +$('bSize').value; ring.position.set(hit.x, hit.y + .3, hit.z); ring.scale.setScalar(tool === 'muro' ? 1 : R); }
-  if (stroke && hit) {
-    lastHit = hit;
-    if (stroke.tool === 'muro') {
-      stroke.path.push(hit);
-      muroLine.geometry.setFromPoints(stroke.path.map(p => new THREE.Vector3(p.x, p.y + .4, p.z)));
-    }
-  }
-});
-el.addEventListener('pointerup', e => {
-  const clickLike = downPos && Math.hypot(e.clientX - downPos[0], e.clientY - downPos[1]) < 4;
-  if (drag) {
-    if (!drag.moved) G.undo.pop();               // solo era una selección
-    drag = null; tip.hidden = true; controls.enabled = true;
-    compose(); updateMesh(); infoText(); editPanel();
-    return;
-  }
-  if (stroke) {
-    if (stroke.tool === 'muro') crearMuro(stroke.path);
-    stroke = null; controls.enabled = true; muroLine.geometry.setFromPoints([]);
-    compose(); updateMesh(); infoText(); editPanel();
-    return;
-  }
-  if (clickLike && tool === 'mover' && G && G.sel !== null) { G.sel = null; updateMesh(); editPanel(); }
-});
-el.addEventListener('pointerleave', () => { ring.visible = false; });
-
-// aplica el pincel en cada fotograma mientras se mantiene pulsado
-function applyBrush(hit, dt) {
-  const { nx, ny, res, edit, z, mask } = G, R = +$('bSize').value, Rc = R / res, F = +$('bForce').value / 5;
-  const c0 = Math.max(0, Math.floor(hit.c - Rc)), c1 = Math.min(nx - 1, Math.ceil(hit.c + Rc));
-  const r0 = Math.max(0, Math.floor(hit.r - Rc)), r1 = Math.min(ny - 1, Math.ceil(hit.r + Rc));
-  let t = stroke.tool; if (stroke.shift && t === 'subir') t = 'bajar'; else if (stroke.shift && t === 'bajar') t = 'subir';
-  const rate = Math.min(dt, 50) / 1000;
-  for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) {
-    const i = r * nx + c; if (!mask[i]) continue;
-    const d = Math.hypot(c - hit.c, r - hit.r) / Rc; if (d > 1) continue;
-    const w = (1 - d * d) ** 2;                   // caída suave hacia el borde del pincel
-    if (t === 'subir') edit[i] += w * F * 1.5 * rate;
-    else if (t === 'bajar') edit[i] -= w * F * 1.5 * rate;
-    else if (t === 'aplanar') edit[i] += (stroke.target - z[i]) * Math.min(1, w * F * 4 * rate);
-    else if (t === 'suavizar') {
-      let s = 0, n = 0;
-      for (let dr = -2; dr <= 2; dr++) for (let dc = -2; dc <= 2; dc++) { const cc = c + dc, rr = r + dr; if (cc >= 0 && rr >= 0 && cc < nx && rr < ny) { s += z[rr * nx + cc]; n++; } }
-      edit[i] += (s / n - z[i]) * Math.min(1, w * F * 4 * rate);
-    }
-  }
-}
-
-// Muro: la línea parte los bancales que cruza; el trozo más bajo pasa a ser un bancal nuevo, «Muro» metros por debajo
-function crearMuro(path) {
-  if (path.length < 2) return;
-  const { nx, ny, res } = G, barrier = new Uint8Array(nx * ny), P = path.map(p => [p.c, p.r]);
-  const ext = (a, b) => { const dx = a[0] - b[0], dy = a[1] - b[1], L0 = Math.hypot(dx, dy) || 1; return [a[0] + dx / L0 * 3 / res, a[1] + dy / L0 * 3 / res]; };
-  P.unshift(ext(P[0], P[1])); P.push(ext(P[P.length - 1], P[P.length - 2]));
-  for (let k = 0; k < P.length - 1; k++) {
-    const [ax, ay] = P[k], [bx, by] = P[k + 1], n = Math.ceil(Math.hypot(bx - ax, by - ay) * 3) + 1;
-    for (let s = 0; s <= n; s++) { const c = Math.round(ax + (bx - ax) * s / n), r = Math.round(ay + (by - ay) * s / n); if (c >= 0 && r >= 0 && c < nx && r < ny) barrier[r * nx + c] = 1; }
-  }
-  const touched = new Set(); for (let i = 0; i < nx * ny; i++) if (barrier[i] && G.label[i] >= 0) touched.add(G.label[i]);
-  const step = +$('muro').value; let splits = 0;
-  for (const l of touched) {
-    const seen = new Uint8Array(nx * ny), parts = [];
-    for (let s0 = 0; s0 < nx * ny; s0++) {
-      if (seen[s0] || barrier[s0] || G.label[s0] !== l) continue;
-      const cells = [s0]; seen[s0] = 1;
-      for (let q = 0; q < cells.length; q++) { const i = cells[q], c = i % nx, r = (i / nx) | 0;
-        for (const [dc, dr] of N4) { const cc = c + dc, rr = r + dr; if (cc < 0 || rr < 0 || cc >= nx || rr >= ny) continue;
-          const j = rr * nx + cc; if (!seen[j] && !barrier[j] && G.label[j] === l) { seen[j] = 1; cells.push(j); } } }
-      if (cells.length * res * res >= 4) parts.push({ cells, mean: cells.reduce((s, i) => s + G.raw[i], 0) / cells.length });
-    }
-    if (parts.length < 2) continue;
-    parts.sort((a, b) => b.mean - a.mean);       // el más alto (según el relieve real) se queda; los demás bajan
-    const hTop = compOf(l).h0 + (G.offsets.get(l) || 0);
-    for (const part of parts.slice(1)) {
-      const id = MANUAL + G.manual.length;
-      G.manual.push({ h0: hTop - step, type: 'bancal' });
-      for (const i of part.cells) G.override[i] = id;
-    }
-    splits++;
-  }
-  status(splits ? `Muro creado: ${splits} bancal(es) partido(s).` : 'La línea tiene que cruzar un bancal de lado a lado.');
-  if (!splits) G.undo.pop();
-}
-
-// Alt + clic en un muro: los dos bancales que separa quedan a la misma altura (la del más alto)
-function fusionar(hit) {
-  const { nx, ny } = G, cnt = new Map();
-  for (let dr = -2; dr <= 2; dr++) for (let dc = -2; dc <= 2; dc++) {
-    const c = hit.c + dc, r = hit.r + dr; if (c < 0 || r < 0 || c >= nx || r >= ny) continue;
-    const l = G.label[r * nx + c]; if (l >= 0) cnt.set(l, (cnt.get(l) || 0) + 1);
-  }
-  const ls = [...cnt.entries()].sort((a, b) => b[1] - a[1]).slice(0, 2).map(e => e[0]);
-  if (ls.length < 2) return status('Alt + clic justo encima de un muro para fusionar los dos bancales.');
-  pushUndo();
-  const h = l => compOf(l).h0 + (G.offsets.get(l) || 0);
-  const [hi, lo] = h(ls[0]) >= h(ls[1]) ? ls : [ls[1], ls[0]];
-  G.offsets.set(lo, h(hi) - compOf(lo).h0);
-  compose(); updateMesh(); infoText();
-  status('Bancales fusionados.');
-}
-
-// ---------- Paneles ----------
-function infoText() {
-  const { area, hmin, hmax, mdtRes, res } = G;
-  const ls = [...G.counts.keys()], b = ls.filter(l => compOf(l).type === 'bancal'), li = ls.filter(l => compOf(l).type === 'liso');
-  let t = `<b>Terreno propio</b>: ${fmt(area)} m² (${(area / 1e4).toFixed(2).replace('.', ',')} ha)<br>Altitud real: ${hmin.toFixed(1)} – ${hmax.toFixed(1)} m · relieve MDT IGN ${mdtRes} m<br>`;
-  if (b.length) t += `<b>${b.length} bancales</b> · superficie media ${fmt(b.reduce((s, l) => s + G.counts.get(l), 0) * res * res / b.length)} m²<br>`;
-  if (li.length) t += `<b>${li.length} zona(s) lisa(s)</b><br>`;
-  if (!G.zonas.length && !b.length) t += 'Sin bancalizar: relieve real del IGN.';
-  info.innerHTML = t;
-}
-function editPanel() {
-  if (!G || G.sel === null || !G.counts.has(G.sel)) { edit.hidden = true; return; }
-  const l = G.sel, C = compOf(l), off = G.offsets.get(l) || 0;
-  edit.hidden = false;
-  edit.innerHTML = `<b>${C.type === 'liso' ? 'Zona lisa' : 'Bancal'}</b><br>Altura: ${fm(C.h0 + off)} m${off ? ` (${off > 0 ? '+' : ''}${fm(off)} m)` : ''}<br>Superficie: ${fmt(G.counts.get(l) * G.res * G.res)} m²<br>
-    <button id="eReset" class="sec">Altura original</button><button id="eClose" class="sec">Cerrar</button>`;
-  $('eReset').onclick = () => { pushUndo(); G.offsets.delete(l); compose(); updateMesh(); editPanel(); };
-  $('eClose').onclick = () => { G.sel = null; updateMesh(); editPanel(); };
-}
-
-// ---------- Bucle de render ----------
-(function loop(now) {
-  requestAnimationFrame(loop);
-  const dt = now - lastFrame; lastFrame = now;
-  if (stroke && stroke.tool !== 'muro' && lastHit) { applyBrush(lastHit, dt); dirty = true; }
-  if (dirty && G) { compose(); updateMesh(); dirty = false; }
-  controls.update(); renderer.render(scene, camera);
-})(performance.now());
-
-// ---------- Generar ----------
+// ---------- Generar el plano ----------
 $('bGenerar').onclick = async () => {
   if (mode) finishDraw();
   const poly = parcelaLayer.getLayers()[0];
   if (!poly) return status('Primero dibuja tu terreno.');
   const P = poly.getLatLngs()[0].map(toUTM);
-  const xs = P.map(p => p[0]), ys = P.map(p => p[1]), pad = 25;
+  const xs = P.map(p => p[0]), ys = P.map(p => p[1]), pad = 10;
   const x0 = Math.floor((Math.min(...xs) - pad) / 5) * 5, x1 = Math.ceil((Math.max(...xs) + pad) / 5) * 5;
   const y0 = Math.floor((Math.min(...ys) - pad) / 5) * 5, y1 = Math.ceil((Math.max(...ys) + pad) / 5) * 5;
   if (x1 - x0 > 1500 || y1 - y0 > 1500) return status('Terreno demasiado grande para la demo (máx. ~1,5 km).');
-  status('Descargando relieve (MDT IGN) y ortofoto PNOA…');
+  status('Descargando ortofoto PNOA y relieve (MDT IGN)…');
   try {
     const W = x1 - x0, H = y1 - y0;
     const [mdt, tex] = await Promise.all([fetchMDT(x0, y0, x1, y1), loadOrtho(x0, y0, x1, y1)]);
     orthoTex = tex; useOrtho = !!tex; $('bTex').textContent = useOrtho ? 'Textura: ortofoto' : 'Textura: low-poly';
-    const res = Math.max(W, H) > 700 ? 2 : 1, nx = Math.round(W / res) + 1, ny = Math.round(H / res) + 1;
+    const span = Math.max(W, H), res = span <= 300 ? .5 : span <= 800 ? 1 : 2;   // rejilla fina = muros precisos
+    const nx = Math.round(W / res) + 1, ny = Math.round(H / res) + 1;
     const s = sampler(mdt), raw = new Float32Array(nx * ny), mask = new Uint8Array(nx * ny);
     let hmin = Infinity, hmax = -Infinity;
     for (let r = 0; r < ny; r++) for (let c = 0; c < nx; c++) {
@@ -679,27 +505,30 @@ $('bGenerar').onclick = async () => {
       raw[i] = s(x, y); mask[i] = inside(x, y, P) ? 1 : 0;
       if (mask[i]) { hmin = Math.min(hmin, raw[i]); hmax = Math.max(hmax, raw[i]); }
     }
-    G = { nx, ny, res, x0, y1, raw, mask, hmin, hmax, area: areaUTM(P), mdtRes: mdt.cellsize,
-          smoothCache: new Map(), suav: +$('suav').value, zonas: [], offsets: new Map(),
-          edit: new Float32Array(nx * ny), override: new Int32Array(nx * ny).fill(-1), manual: [], undo: [], sel: null };
-    zonasLayer.clearLayers();
-    ['bModo', 'bTex', 'bTodo', 'bZona', 'bLiso'].forEach(id => $(id).disabled = false);
-    $('bDeshacer').disabled = true;
-    $('tools').hidden = false; help.hidden = false; help.innerHTML = HELP[tool] + '<br><b>Ctrl+Z</b>: deshacer.';
-    computeBase(); compose(); buildMesh(); rebuildAll();
-    const span = Math.max(W, H);
-    controls.target.set(0, (hmax - hmin) / 2, 0);
-    camera.position.set(span * .35, span * .55 + (hmax - hmin), span * .85);
-    if (!tex) status('Ortofoto PNOA no disponible ahora mismo: gemelo en low-poly. ' + $('status').textContent);
-  } catch (err) { console.error(err); status('Error descargando datos del IGN: ' + (err && err.message ? err.message : 'fallo de red') + '. Vuelve a pulsar «Generar 3D».'); }
+    const rawRel = raw.map(v => v - hmin);
+    G = { nx, ny, res, x0, y1, raw, rawRel, mask, hmin, hmax, area: areaUTM(P), mdtRes: mdt.cellsize,
+          muros: [], manualH: new Map(), undo: [], sel: null, regions: null };
+    murosLayer.clearLayers();
+    ['bModo', 'bTex', 'bMuro', 'bBorrar'].forEach(id => $(id).disabled = false);
+    $('help').hidden = false;
+    showGemelo = true; $('bModo').textContent = 'Ver: gemelo';
+    G.regions = null; buildMeshAfter();
+    controls.target.set(0, 0, 0);
+    camera.position.set(0, span * 1.1, span * .45);                 // casi cenital: se ve la ortofoto como en el mapa
+    status(`Plano generado (rejilla de ${String(res).replace('.', ',')} m). Pulsa «Dibujar muro» y traza los muros sobre la ortofoto del mapa.`);
+  } catch (err) { console.error(err); status('Error descargando datos del IGN: ' + (err && err.message ? err.message : 'fallo de red') + '. Vuelve a pulsar «Generar plano».'); }
 };
-$('bModo').onclick = e => { showGemelo = !showGemelo; e.target.textContent = showGemelo ? 'Ver: gemelo' : 'Ver: MDT bruto'; updateMesh(); };
+function buildMeshAfter() {
+  // primera construcción: rebuild() necesita la malla para actualizarla
+  G.barrier = new Uint8Array(G.nx * G.ny); G.label = new Int32Array(G.nx * G.ny).fill(-1); G.z = new Float32Array(G.nx * G.ny);
+  buildMesh(); rebuild();
+}
+$('bModo').onclick = e => { showGemelo = !showGemelo; e.target.textContent = showGemelo ? 'Ver: gemelo' : 'Ver: relieve real (MDT)'; updateMesh(); };
 $('bTex').onclick = e => {
-  if (!orthoTex) return status('No hay ortofoto descargada; vuelve a generar el 3D.');
+  if (!orthoTex) return status('No hay ortofoto descargada; vuelve a generar el plano.');
   useOrtho = !useOrtho; e.target.textContent = useOrtho ? 'Textura: ortofoto' : 'Textura: low-poly'; buildMesh();
 };
 $('exag').oninput = e => { $('exagV').textContent = e.target.value + '×'; if (G) updateMesh(); };
-$('muro').oninput = e => $('muroV').textContent = (+e.target.value).toString().replace('.', ',') + ' m';
 </script>
 </body>
 </html>
