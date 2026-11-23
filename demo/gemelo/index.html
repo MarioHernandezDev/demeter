@@ -127,9 +127,30 @@ function areaUTM(p) { let a = 0; for (let i = 0; i < p.length; i++) { const [x1,
 function inside(x, y, p) { let c = false; for (let i = 0, j = p.length - 1; i < p.length; j = i++) { const [xi, yi] = p[i], [xj, yj] = p[j]; if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) c = !c; } return c; }
 
 // ---------- MDT del IGN vía WCS (CORS abierto, sin API key) ----------
+// fetch con tiempo límite y reintentos: los servicios del IGN a veces tardan o fallan puntualmente
+async function fetchRetry(url, tries = 3, ms = 30000) {
+  let last;
+  for (let t = 0; t < tries; t++) {
+    const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), ms);
+    try {
+      const r = await fetch(url, { signal: ctl.signal });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return r;
+    } catch (e) { last = e.name === 'AbortError' ? new Error('tiempo de espera agotado') : e; }
+    finally { clearTimeout(timer); }
+    await new Promise(res => setTimeout(res, 800 * (t + 1)));
+  }
+  throw last;
+}
 async function fetchMDT(x0, y0, x1, y1) {
-  const url = `https://servicios.idee.es/wcs-inspire/mdt?SERVICE=WCS&VERSION=2.0.1&REQUEST=GetCoverage&CoverageId=Elevacion25830_5&SUBSET=x(${x0},${x1})&SUBSET=y(${y0},${y1})&FORMAT=application/asc`;
-  const txt = await (await fetch(url)).text();
+  const url = `/proxy/mdt-wcs?SERVICE=WCS&VERSION=2.0.1&REQUEST=GetCoverage&CoverageId=Elevacion25830_5&SUBSET=x(${x0},${x1})&SUBSET=y(${y0},${y1})&FORMAT=application/asc`;
+  let txt;
+  try { txt = await (await fetchRetry(url)).text(); }
+  catch (e) { throw new Error(`relieve MDT (${e.message || 'sin conexión'})`); }
+  if (txt.indexOf('ncols') < 0) {
+    const msg = (txt.match(/<ows:ExceptionText>([^<]*)/) || [])[1];
+    throw new Error(`relieve MDT (${msg || 'respuesta inesperada del servidor'})`);
+  }
   const tok = txt.slice(txt.indexOf('ncols')).split(/\s+/);
   const hdr = {}; let i = 0;
   while (/[a-z]/i.test(tok[i]) && !isNaN(parseFloat(tok[i + 1]))) { hdr[tok[i].toLowerCase()] = parseFloat(tok[i + 1]); i += 2; }
@@ -346,10 +367,27 @@ $('bGenerar').onclick = async () => {
   if (x1 - x0 > 1500 || y1 - y0 > 1500) return status('Terreno demasiado grande para la demo (máx. ~1,5 km).');
   status('Descargando relieve (MDT IGN) y ortofoto PNOA…');
   try {
-    const W = x1 - x0, H = y1 - y0, px = Math.min(2048, Math.round(Math.max(W, H) * 4));
-    const orthoUrl = `https://www.ign.es/wms-inspire/pnoa-ma?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=OI.OrthoimageCoverage&STYLES=&CRS=EPSG:25830&BBOX=${x0},${y0},${x1},${y1}&WIDTH=${Math.round(px * W / Math.max(W, H))}&HEIGHT=${Math.round(px * H / Math.max(W, H))}&FORMAT=image/jpeg`;
-    const [mdt, tex] = await Promise.all([fetchMDT(x0, y0, x1, y1), new THREE.TextureLoader().setCrossOrigin('anonymous').loadAsync(orthoUrl)]);
-    tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 8; orthoTex = tex;
+    const W = x1 - x0, H = y1 - y0;
+    // ortofoto: si falla a 2048 px se reintenta más pequeña; si falla del todo, el gemelo sigue en low-poly
+    const loadOrtho = async () => {
+      for (const max of [2048, 1024, 512]) {
+        const px = Math.min(max, Math.round(Math.max(W, H) * 4));
+        const url = `/proxy/pnoa-wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=OI.OrthoimageCoverage&STYLES=&CRS=EPSG:25830&BBOX=${x0},${y0},${x1},${y1}&WIDTH=${Math.round(px * W / Math.max(W, H))}&HEIGHT=${Math.round(px * H / Math.max(W, H))}&FORMAT=image/jpeg`;
+        try {
+          const blob = await (await fetchRetry(url, 2)).blob();
+          if (!blob.type.startsWith('image/')) throw new Error('no es una imagen');
+          const objUrl = URL.createObjectURL(blob);
+          const tex = await new THREE.TextureLoader().loadAsync(objUrl);
+          URL.revokeObjectURL(objUrl);
+          tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 8;
+          return tex;
+        } catch (e) { console.warn(`Ortofoto ${max}px falló:`, e); }
+      }
+      return null;
+    };
+    const [mdt, tex] = await Promise.all([fetchMDT(x0, y0, x1, y1), loadOrtho()]);
+    orthoTex = tex;
+    if (!tex) { useOrtho = false; $('bTex').textContent = 'Textura: low-poly'; }
     const res = Math.max(W, H) > 700 ? 2 : 1, nx = Math.round(W / res) + 1, ny = Math.round(H / res) + 1;
     const s = sampler(mdt), raw = new Float32Array(nx * ny), mask = new Uint8Array(nx * ny);
     let hmin = Infinity, hmax = -Infinity;
@@ -366,7 +404,8 @@ $('bGenerar').onclick = async () => {
     const span = Math.max(W, H);
     controls.target.set(0, (hmax - hmin) / 2, 0);
     camera.position.set(span * .35, span * .55 + (hmax - hmin), span * .85);
-  } catch (err) { console.error(err); status('Error descargando datos del IGN: ' + err.message); }
+    if (!tex) status('Ortofoto PNOA no disponible ahora mismo: gemelo en low-poly. ' + $('status').textContent);
+  } catch (err) { console.error(err); status('Error descargando datos del IGN: ' + (err && err.message ? err.message : 'fallo de red') + '. Vuelve a pulsar «Generar 3D».'); }
 };
 $('bTodo').onclick = () => {
   if (!G) return;
@@ -376,7 +415,7 @@ $('bTodo').onclick = () => {
 };
 $('bDeshacer').onclick = () => { const z = G && G.zonas.pop(); if (!z) return; if (z.layer) zonasLayer.removeLayer(z.layer); refresh(); };
 $('bModo').onclick = e => { showGemelo = !showGemelo; e.target.textContent = showGemelo ? 'Ver: gemelo' : 'Ver: MDT bruto'; buildMesh(); };
-$('bTex').onclick = e => { useOrtho = !useOrtho; e.target.textContent = useOrtho ? 'Textura: ortofoto' : 'Textura: low-poly'; buildMesh(); };
+$('bTex').onclick = e => { if (!orthoTex) return status('No hay ortofoto descargada; vuelve a generar el 3D.'); useOrtho = !useOrtho; e.target.textContent = useOrtho ? 'Textura: ortofoto' : 'Textura: low-poly'; buildMesh(); };
 $('exag').oninput = e => { $('exagV').textContent = e.target.value + '×'; if (G) buildMesh(); };
 $('muro').oninput = e => $('muroV').textContent = (+e.target.value).toString().replace('.', ',') + ' m';
 </script>

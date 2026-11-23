@@ -4,7 +4,9 @@
     {
       "name": "demo-gemelo",
       "runtimeExecutable": "python",
-      "runtimeArgs": ["-m", "http.server", "8765", "--directory", "demo/gemelo"],
+      "runtimeArgs": [
+        "demo/gemelo/server.py"
+      ],
       "port": 8765
     }
   ]
