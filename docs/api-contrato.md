@@ -9,12 +9,16 @@ sustituye cada llamada a `sample_data.py` por su consulta; los esquemas (`schema
 ## Probarlo
 
 ```
-pip install fastapi uvicorn pydantic
+pip install fastapi uvicorn pydantic bcrypt pyjwt
 uvicorn demeter.api.app:api --reload      # http://127.0.0.1:8000/docs
 ```
 
 En `/docs`: `POST /api/auth/login` con `admin` / `demo1234` → copia el `access_token` → «Authorize».
-Usuarios de ejemplo: `admin`, `tecnico`, `lector` (misma contraseña). Ingesta: cabecera
+Usuarios de ejemplo: `admin`, `tecnico`, `lector` (misma contraseña). El login es real: contraseñas
+con bcrypt y token JWT firmado que caduca a los 60 min (`DEMETER_JWT_MINUTES`; el secreto va en
+`DEMETER_JWT_SECRET`). El token solo lleva el id: el rol y si el usuario sigue activo se leen en
+cada petición, así que una baja o un cambio de rol valen al instante. Hasta que la BD tenga
+usuarios (seed, #14) los usuarios son los de ejemplo, en `demeter/api/auth.py` (`UserStore`). Ingesta: cabecera
 `X-API-Key: demo-ingest-key` (variable de entorno `DEMETER_INGEST_KEY` para cambiarla).
 
 ## Convenciones

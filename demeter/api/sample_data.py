@@ -42,7 +42,6 @@ USERS = {
     "tecnico": s.User(id=2, username="tecnico", role="tecnico"),
     "lector": s.User(id=3, username="lector", role="lector"),
 }
-TOKENS = {f"demo-token-{name}": user for name, user in USERS.items()}
 
 
 # --------------------------------------------------------------------------------------
