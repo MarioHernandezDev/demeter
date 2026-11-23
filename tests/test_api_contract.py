@@ -10,8 +10,15 @@ from demeter.state.types import DashboardSummary as UiDashboard  # contrato de l
 client = TestClient(api)
 
 
+_tokens: dict = {}
+
+
 def auth(role="admin"):
-    return {"Authorization": f"Bearer demo-token-{role}"}
+    """Cabecera con un token real (JWT) de uno de los usuarios de ejemplo."""
+    if role not in _tokens:
+        r = client.post("/api/auth/login", json={"username": role, "password": "demo1234"})
+        _tokens[role] = r.json()["access_token"]
+    return {"Authorization": f"Bearer {_tokens[role]}"}
 
 
 def test_health():
@@ -119,3 +126,37 @@ def test_ultima_lectura_es_de_hace_menos_de_10_min():
     r = client.get("/api/sensors/t001/data?limit=1", headers=auth()).json()[0]
     t = datetime.fromisoformat(r["timestamp"].replace("Z", "+00:00"))
     assert datetime.now(timezone.utc) - t < timedelta(minutes=10)
+
+
+def test_prediccion_24h():
+    r = client.get("/api/sensors/t001/prediction", headers=auth("lector"))
+    assert r.status_code == 200
+    p = r.json()
+    assert p["horizon_hours"] == 24 and p["step_minutes"] == 60 and len(p["points"]) == 24
+    assert all(x["lower"] <= x["value"] <= x["upper"] for x in p["points"])
+    assert p["points"][0]["time"] < p["points"][-1]["time"]
+    assert p["trend"] in ("rising", "falling", "stable")
+    assert client.get("/api/sensors/zzz/prediction", headers=auth()).status_code == 404
+    assert client.get("/api/sensors/t001/prediction").status_code == 401
+
+
+def test_prediccion_avisa_de_cruce_de_umbral():
+    # h002 está dentro de umbrales y h001 ya fuera: solo el primero puede tener ``crossing``.
+    for sid in ("t001", "h001", "h002", "d001"):
+        p = client.get(f"/api/sensors/{sid}/prediction", headers=auth()).json()
+        if p["crossing"]:
+            assert p["crossing"]["type"] in ("LOW", "HIGH")
+            assert p["crossing"]["at"] in [x["time"] for x in p["points"]]
+
+
+def test_consejo_de_riego():
+    r = client.get("/api/parcels/1/irrigation", headers=auth("lector"))
+    assert r.status_code == 200
+    a = r.json()
+    assert a["action"] in ("irrigate", "wait", "skip") and a["summary"]
+    assert a["enough_water"] == (a["available_l"] >= a["total_liters"])
+    if a["action"] == "irrigate":
+        assert a["zones"] and a["total_liters"] == pytest.approx(sum(z["liters"] for z in a["zones"]), abs=0.2)
+    else:
+        assert a["zones"] == [] and a["total_liters"] == 0
+    assert client.get("/api/parcels/99/irrigation", headers=auth()).status_code == 404

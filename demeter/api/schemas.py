@@ -87,7 +87,7 @@ class UserCreate(BaseModel):
     """Cuerpo de ``POST /api/users`` (solo admin)."""
 
     username: str = Field(min_length=1)
-    password: str = Field(min_length=8)
+    password: str = Field(min_length=8, max_length=72)  # bcrypt solo lee 72 bytes
     role: Role = "tecnico"
 
 
@@ -390,6 +390,89 @@ class Balance(BaseModel):
     expense: float
     balance: float  # income - expense
     by_category: dict[str, float] = Field(default_factory=dict)  # gastos (negativo) e ingresos (positivo)
+
+
+# --------------------------------------------------------------------------------------
+# Insights: predicción a 24 h y consejo de riego (E3, issue #3)
+# --------------------------------------------------------------------------------------
+
+Trend = Literal["rising", "falling", "stable"]
+IrrigationAction = Literal["irrigate", "wait", "skip"]
+
+
+class PredictionPoint(BaseModel):
+    """Un punto de la predicción: valor esperado y su banda de confianza."""
+
+    time: datetime  # hora en punto, UTC
+    value: float
+    lower: float  # límite inferior de la banda (``lower <= value``)
+    upper: float  # límite superior de la banda (``value <= upper``)
+
+
+class ThresholdCrossing(BaseModel):
+    """Primer momento en que se espera salir de umbral. Solo si hoy el sensor está dentro."""
+
+    type: AlertType  # LOW o HIGH, igual que las alertas
+    at: datetime
+    value: float  # valor previsto en ese instante
+
+
+class SensorPrediction(BaseModel):
+    """Predicción a 24 h de un sensor. ``GET /api/sensors/{id}/prediction``.
+
+    Siempre 24 puntos, uno por hora, desde la próxima hora en punto. Si no hay datos
+    suficientes para predecir, la API responde 404 (no inventa una predicción).
+    """
+
+    sensor_id: str
+    type: SensorType
+    unit: str
+    generated_at: datetime
+    horizon_hours: int = 24
+    step_minutes: int = 60
+    model: str  # modelo usado, p. ej. "regresion-lineal-v1" (informativo)
+    trend: Trend
+    crossing: Optional[ThresholdCrossing] = None  # null si no se espera salir de umbral
+    points: list[PredictionPoint] = Field(default_factory=list)
+
+
+class IrrigationZone(BaseModel):
+    """Qué regar en una zona de cultivo y cuándo."""
+
+    zone_id: int
+    zone_name: str
+    liters: float
+    start_at: datetime
+    duration_min: int
+    reason: str = ""
+
+
+class IrrigationFactors(BaseModel):
+    """Datos en los que se basa el consejo, para mostrarlos junto a él. ``null`` = sin dato."""
+
+    soil_moisture_pct: Optional[float] = None  # media de los sensores humedad_suelo
+    rain_probability_pct: Optional[float] = None  # máxima en las próximas 24 h
+    rain_mm_24h: Optional[float] = None  # lluvia total prevista en 24 h
+    tank_level_pct: Optional[float] = None
+
+
+class IrrigationAdvice(BaseModel):
+    """Consejo de riego de una parcela. ``GET /api/parcels/{id}/irrigation``.
+
+    ``action``: ``irrigate`` (regar ya, con reparto en ``zones``), ``wait`` (aún no hace falta,
+    se vuelve a mirar) o ``skip`` (no regar: se espera lluvia). Con ``wait``/``skip``,
+    ``zones`` va vacío y ``total_liters`` es 0.
+    """
+
+    parcel_id: int
+    generated_at: datetime
+    action: IrrigationAction
+    summary: str  # frase lista para mostrar al agricultor
+    total_liters: float
+    available_l: float
+    enough_water: bool  # ``available_l >= total_liters``
+    factors: IrrigationFactors
+    zones: list[IrrigationZone] = Field(default_factory=list)
 
 
 class Health(BaseModel):

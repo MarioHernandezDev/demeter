@@ -1,0 +1,38 @@
+<main id="top">
+  <section class="split">
+    <div class="split__list">
+      <p class="kick">3 fincas · 12 sensores · 1 en alerta</p>
+      <h1 class="h">Tus<br><em>parcelas.</em></h1>
+      <ul class="plist2"><li class="pr" data-parcel="costa" aria-current="false" tabindex="0"><img src="/proto/img/mundos/medir.webp" alt="">
+      <span class="pr__t"><b>Finca La Costa</b><small>Carchuna · 1,2 ha · invernadero · 4 sensores</small></span>
+      <svg class="pr__spark" viewBox="0 0 100 30" preserveAspectRatio="none" data-spark="0" aria-hidden="true"></svg>
+      <span class="pr__st is-warn">1 bajo</span></li><li class="pr" data-parcel="rio" aria-current="false" tabindex="0"><img src="/proto/img/mundos/avisar.webp" alt="">
+      <span class="pr__t"><b>Bancales del Río Verde</b><small>Almuñécar · 3,4 ha · aguacate · 6 sensores</small></span>
+      <svg class="pr__spark" viewBox="0 0 100 30" preserveAspectRatio="none" data-spark="1" aria-hidden="true"></svg>
+      <span class="pr__st">En margen</span></li><li class="pr" data-parcel="llanos" aria-current="false" tabindex="0"><img src="/proto/img/mundos/regar.webp" alt="">
+      <span class="pr__t"><b>Cortijo Los Llanos</b><small>Lújar · 0,8 ha · chirimoya · 2 sensores</small></span>
+      <svg class="pr__spark" viewBox="0 0 100 30" preserveAspectRatio="none" data-spark="2" aria-hidden="true"></svg>
+      <span class="pr__st">En margen</span></li></ul>
+      <a class="pill" href="#" data-toast="Dibuja el contorno de la nueva parcela en el mapa" style="justify-self:start">+ Añadir parcela</a>
+    </div>
+    <div class="split__map"><div class="map" data-map></div><p class="map__hint mono">Pasa por una finca · pulsa para ver su histórico</p></div>
+  </section>
+
+  <section class="page page--below" id="historico">
+    <div class="page__in">
+      <div class="sec">
+        <div class="sec__h"><h3><span data-parcel-name>Finca La Costa</span> · histórico</h3><button type="button" data-csv data-toast="Descargando CSV">Exportar CSV ↓</button></div>
+        <div class="tools">
+          <span data-group style="display:flex;gap:6px;flex-wrap:wrap"><button class="pill pill--s" aria-pressed="true" data-hs="h001">Humedad del suelo</button><button class="pill pill--s" aria-pressed="false" data-hs="t001">Temperatura</button><button class="pill pill--s" aria-pressed="false" data-hs="l001">Luminosidad</button><button class="pill pill--s" aria-pressed="false" data-hs="a001">Humedad ambiente</button></span>
+          <span class="tools__sep"></span>
+          <span data-group style="display:flex;gap:6px"><button class="pill pill--s" aria-pressed="true" data-hr="24">24 h</button><button class="pill pill--s" aria-pressed="false" data-hr="168">7 días</button><button class="pill pill--s" aria-pressed="false" data-hr="720">30 días</button></span>
+        </div>
+        <div class="stats" data-stats></div>
+        <div class="bigchart" data-chart-hist></div>
+        <table class="tbl"><thead><tr><th>Fecha</th><th>Valor</th><th>Umbral</th><th>Estado</th></tr></thead><tbody data-hist-table></tbody></table>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div class="toast" role="status" hidden></div>
