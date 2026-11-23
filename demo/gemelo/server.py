@@ -12,6 +12,8 @@ from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+import bancales_cv  # detección automática de muros (mismo directorio)
+
 PORT = 8765
 UPSTREAM = {
     "/proxy/pnoa-wms": "https://www.ign.es/wms-inspire/pnoa-ma",
@@ -22,6 +24,8 @@ UPSTREAM = {
 class Handler(SimpleHTTPRequestHandler):
     def do_GET(self):
         path, _, query = self.path.partition("?")
+        if path == "/api/ortho":
+            return self._ortho(query)
         base = UPSTREAM.get(path)
         if base is None:
             return super().do_GET()
@@ -39,6 +43,50 @@ class Handler(SimpleHTTPRequestHandler):
             body = f"Error contactando con el IGN: {e}".encode()
             self.send_response(502)
             self.send_header("Content-Type", "text/plain; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _ortho(self, query):
+        """GET /api/ortho?bbox=x0,y0,x1,y1&w=&h= → JPEG de la ortofoto (WMS o, si falla, teselas WMTS)."""
+        from urllib.parse import parse_qs
+        import numpy as np
+        from PIL import Image
+        import io
+        try:
+            q = parse_qs(query)
+            x0, y0, x1, y1 = map(float, q["bbox"][0].split(","))
+            w, h = int(q["w"][0]), int(q["h"][0])
+            img = bancales_cv.ortho(x0, y0, x1, y1, px=(x1 - x0) / w)
+            buf = io.BytesIO(); Image.fromarray((img * 255).astype(np.uint8)).save(buf, "JPEG", quality=88)
+            body, code, ctype = buf.getvalue(), 200, "image/jpeg"
+        except Exception as e:  # noqa: BLE001
+            body, code, ctype = f"Error ortofoto: {e}".encode(), 502, "text/plain; charset=utf-8"
+        self.send_response(code)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_POST(self):
+        """POST /api/detectar  {bbox: [x0, y0, x1, y1], poly: [[x, y], ...]} (EPSG:25830)
+        → {muros: [{pts: [[x, y], ...], conf}], segundos}"""
+        if self.path != "/api/detectar":
+            self.send_error(404); return
+        import json
+        import time
+        try:
+            req = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))))
+            x0, y0, x1, y1 = map(float, req["bbox"])
+            if x1 - x0 > 450 or y1 - y0 > 450:
+                raise ValueError("Zona demasiado grande para detectar (máx. ~450 m de lado). Dibuja un terreno más pequeño.")
+            t = time.time()
+            muros = bancales_cv.detectar(x0, y0, x1, y1, poly=req.get("poly"))
+            body, code = json.dumps({"muros": muros, "segundos": round(time.time() - t, 1)}).encode(), 200
+        except Exception as e:  # noqa: BLE001 — demo: devolver el error legible al navegador
+            body, code = json.dumps({"error": str(e)}).encode(), 500
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)

@@ -42,6 +42,7 @@
   <button id="bGenerar">2 · Generar plano</button>
   <span class="sep"></span>
   <button id="bMuro" class="sec" disabled>3 · Dibujar muro</button>
+  <button id="bDetectar" disabled title="Busca los muros en la ortofoto (visión por computador)">✨ Detectar bancales</button>
   <button id="bBorrar" class="sec" disabled>Borrar muro</button>
   <label title="Desnivel que se pone automáticamente entre dos bancales vecinos">Altura de muro <input id="muro" type="range" min="0.5" max="3" step="0.25" value="1.5"><span id="muroV">1,5 m</span></label>
   <button id="bDeshacer" class="sec" disabled title="Ctrl+Z">Deshacer</button>
@@ -81,7 +82,8 @@ const status = t => $('status').textContent = t;
 const N4 = [[1, 0], [-1, 0], [0, 1], [0, -1]];
 
 // ---------- Mapa 2D ----------
-const map = L.map('map', { maxZoom: 21 }).setView([36.7585, -3.5300], 16);
+const qs = new URLSearchParams(location.search);   // ?lat=..&lng=..&z=.. para abrir en una zona concreta
+const map = L.map('map', { maxZoom: 21 }).setView([+(qs.get('lat') || 36.7585), +(qs.get('lng') || -3.5300)], +(qs.get('z') || 16));
 const pnoa = L.tileLayer('https://www.ign.es/wmts/pnoa-ma?service=WMTS&request=GetTile&version=1.0.0&Format=image/jpeg&layer=OI.OrthoimageCoverage&style=default&tilematrixset=GoogleMapsCompatible&TileMatrix={z}&TileRow={y}&TileCol={x}',
   { maxZoom: 21, maxNativeZoom: 19, attribution: 'PNOA cedido por © <a href="https://www.ign.es">Instituto Geográfico Nacional</a>' }).addTo(map);
 const osm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 21, maxNativeZoom: 19, attribution: '© OpenStreetMap' });
@@ -158,6 +160,32 @@ function setBorrar(on) {
 }
 $('bBorrar').onclick = () => setBorrar(!borrando);
 
+// ---------- Detección automática (visión por computador en server.py) ----------
+$('bDetectar').onclick = async () => {
+  if (!G) return;
+  cancelDraw(); setBorrar(false);
+  const xs = G.P.map(p => p[0]), ys = G.P.map(p => p[1]);
+  const bbox = [Math.min(...xs) - 5, Math.min(...ys) - 5, Math.max(...xs) + 5, Math.max(...ys) + 5];
+  const btn = $('bDetectar'); btn.disabled = true;
+  status('Detectando bancales en la ortofoto… (10–30 s según el tamaño)');
+  try {
+    const r = await fetch('/api/detectar', { method: 'POST', body: JSON.stringify({ bbox, poly: G.P }) });
+    const js = await r.json();
+    if (!r.ok) throw new Error(js.error || `HTTP ${r.status}`);
+    pushUndo();
+    G.muros = G.muros.filter(m => !m.auto);          // sustituye una detección anterior, conserva los muros manuales
+    for (const m of js.muros) {
+      const ll = m.pts.map(([x, y]) => { const [lng, lat] = proj4('EPSG:25830', 'EPSG:4326', [x, y]); return L.latLng(lat, lng); });
+      G.muros.push({ ll, auto: true, conf: m.conf });
+    }
+    rebuild();
+    const dud = js.muros.filter(m => m.conf < .7).length;
+    status(`${js.muros.length} muros detectados en ${String(js.segundos).replace('.', ',')} s → ${G.regions.length} bancales.` +
+      (dud ? ` ${dud} dudosos (amarillo, discontinuo).` : '') + ' Revisa: «Borrar muro» para quitar, «Dibujar muro» para añadir, Ctrl+Z para deshacer todo.');
+  } catch (e) { status('Error en la detección: ' + e.message); }
+  btn.disabled = false;
+};
+
 // =====================================================================================
 // MODELO: plano llano + muros dibujados → regiones (bancales) → alturas
 //   altura automática: escalón de «Altura de muro» entre vecinos; el relieve real (MDT) solo decide qué lado es el alto
@@ -176,7 +204,9 @@ function addMuro(ll) {
 function drawMurosOnMap() {
   murosLayer.clearLayers();
   G.muros.forEach((m, k) => {
-    const pl = L.polyline(llCurve(m.ll), { color: DRAW.muro.color, weight: 4 }).addTo(murosLayer);
+    const dudoso = m.auto && m.conf < .7;
+    const pl = L.polyline(llCurve(m.ll), { color: dudoso ? '#ffee58' : DRAW.muro.color, weight: m.auto ? 3 : 4, dashArray: dudoso ? '6 5' : null }).addTo(murosLayer);
+    if (m.auto) pl.bindTooltip(`Detectado automáticamente · confianza ${Math.round(m.conf * 100)} %`, { sticky: true });
     pl.on('click', ev => {
       if (!borrando) return;
       L.DomEvent.stop(ev);
@@ -267,7 +297,7 @@ function setRegionHeight(l, h, conArriba) {
 
 // ---------- Deshacer ----------
 function pushUndo() {
-  G.undo.push({ muros: G.muros.map(m => ({ ll: m.ll.slice() })), manualH: new Map(G.manualH) });
+  G.undo.push({ muros: G.muros.map(m => ({ ...m, ll: m.ll.slice() })), manualH: new Map(G.manualH) });
   if (G.undo.length > 50) G.undo.shift();
   $('bDeshacer').disabled = false;
 }
@@ -469,9 +499,9 @@ async function loadOrtho(x0, y0, x1, y1) {
   const W = x1 - x0, H = y1 - y0;
   for (const max of [4096, 2048, 1024]) {
     const px = Math.min(max, Math.round(Math.max(W, H) * 6));
-    const url = `/proxy/pnoa-wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=OI.OrthoimageCoverage&STYLES=&CRS=EPSG:25830&BBOX=${x0},${y0},${x1},${y1}&WIDTH=${Math.round(px * W / Math.max(W, H))}&HEIGHT=${Math.round(px * H / Math.max(W, H))}&FORMAT=image/jpeg`;
+    const url = `/api/ortho?bbox=${x0},${y0},${x1},${y1}&w=${Math.round(px * W / Math.max(W, H))}&h=${Math.round(px * H / Math.max(W, H))}`;
     try {
-      const blob = await (await fetchRetry(url, 2)).blob();
+      const blob = await (await fetchRetry(url, 1, 90000)).blob();
       if (!blob.type.startsWith('image/')) throw new Error('no es una imagen');
       const u = URL.createObjectURL(blob), tex = await new THREE.TextureLoader().loadAsync(u);
       URL.revokeObjectURL(u); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 8;
@@ -506,10 +536,10 @@ $('bGenerar').onclick = async () => {
       if (mask[i]) { hmin = Math.min(hmin, raw[i]); hmax = Math.max(hmax, raw[i]); }
     }
     const rawRel = raw.map(v => v - hmin);
-    G = { nx, ny, res, x0, y1, raw, rawRel, mask, hmin, hmax, area: areaUTM(P), mdtRes: mdt.cellsize,
+    G = { nx, ny, res, x0, y1, raw, rawRel, mask, hmin, hmax, area: areaUTM(P), mdtRes: mdt.cellsize, P,
           muros: [], manualH: new Map(), undo: [], sel: null, regions: null };
     murosLayer.clearLayers();
-    ['bModo', 'bTex', 'bMuro', 'bBorrar'].forEach(id => $(id).disabled = false);
+    ['bModo', 'bTex', 'bMuro', 'bBorrar', 'bDetectar'].forEach(id => $(id).disabled = false);
     $('help').hidden = false;
     showGemelo = true; $('bModo').textContent = 'Ver: gemelo';
     G.regions = null; buildMeshAfter();
