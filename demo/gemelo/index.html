@@ -26,6 +26,12 @@
   #edit input[type=number] { width: 80px; background: #263238; color: #fff; border: 1px solid #546e7a; border-radius: 4px; padding: 3px 5px; font-size: 14px; }
   #edit button { padding: 3px 9px; margin-right: 4px; }
   #tip { position: absolute; pointer-events: none; background: #000d; color: #ffe082; padding: 3px 7px; border-radius: 4px; font-size: 12px; white-space: nowrap; }
+  #dlgEjemplo { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); background: #1d2329; border: 1px solid #455a64; border-radius: 8px; padding: 14px 16px; width: 380px; font-size: 13px; z-index: 20; box-shadow: 0 8px 30px #000a; }
+  #dlgEjemplo .sub { color: #b0bec5; font-size: 12px; margin: 6px 0 10px; }
+  #dlgEjemplo label { display: flex; justify-content: space-between; gap: 8px; margin: 7px 0; }
+  #dlgEjemplo label.chk { justify-content: flex-start; align-items: flex-start; line-height: 1.4; }
+  #dlgEjemplo select, #dlgEjemplo input[type=text] { background: #263238; color: #fff; border: 1px solid #546e7a; border-radius: 4px; padding: 3px 5px; width: 210px; }
+  #dlgEjemplo .row { display: flex; gap: 8px; margin-top: 12px; }
   #help { position: absolute; left: 10px; bottom: 10px; background: #000a; padding: 6px 9px; border-radius: 6px; font-size: 11px; line-height: 1.55; color: #cfd8dc; max-width: 330px; pointer-events: none; }
 </style>
 <script type="importmap">
@@ -44,6 +50,7 @@
   <button id="bMuro" class="sec" disabled>3 · Dibujar muro</button>
   <button id="bDetectar" disabled title="Busca los muros en la ortofoto (visión por computador)">✨ Detectar bancales</button>
   <button id="bBorrar" class="sec" disabled>Borrar muro</button>
+  <button id="bEjemplo" class="sec" disabled title="Guarda la parcela con sus muros corregidos para entrenar y evaluar el detector">💾 Guardar como ejemplo</button>
   <label title="Desnivel que se pone automáticamente entre dos bancales vecinos">Altura de muro <input id="muro" type="range" min="0.5" max="3" step="0.25" value="1.5"><span id="muroV">1,5 m</span></label>
   <button id="bDeshacer" class="sec" disabled title="Ctrl+Z">Deshacer</button>
   <span class="sep"></span>
@@ -58,6 +65,24 @@
     <div id="info">Aún no hay gemelo generado.</div>
     <div id="edit" hidden></div>
     <div id="tip" hidden></div>
+    <div id="dlgEjemplo" hidden>
+      <b>Guardar como ejemplo de entrenamiento</b>
+      <p class="sub">Se guardan la ortofoto, el relieve y los muros tal como están ahora. Asegúrate de haberlos revisado: son la «respuesta correcta» con la que se medirá y entrenará el detector.</p>
+      <label>Cultivo
+        <select id="eCultivo">
+          <option value="olivo">Olivo</option><option value="aguacate">Aguacate</option><option value="mango">Mango</option>
+          <option value="chirimoya">Chirimoya</option><option value="almendro">Almendro</option><option value="otros_frutales">Otros frutales</option>
+          <option value="sin_arboles">Sin árboles / recién labrado</option><option value="invernadero_llano">Invernadero o zona llana</option>
+          <option value="mixto">Mixto</option>
+        </select></label>
+      <label>Árboles por bancal
+        <select id="eArboles"><option value="1">1 fila</option><option value="2">2 filas</option><option value="3+">3 o más</option><option value="0">Sin árboles</option><option value="variable">Variable</option></select></label>
+      <label>Dificultad
+        <select id="eDificultad"><option value="facil">Fácil (bordes muy claros)</option><option value="media" selected>Media</option><option value="dificil">Difícil (arbolado denso, sombras…)</option></select></label>
+      <label>Notas <input id="eNotas" type="text" placeholder="opcional: camino que cruza, muros de piedra…"></label>
+      <label class="chk"><input id="eRevisado" type="checkbox"> <span>He revisado todos los muros (borrado los falsos y dibujado los que faltan, por el <b>borde superior</b> del talud)</span></label>
+      <div class="row"><button id="eGuardar">Guardar ejemplo</button><button id="eCancelar" class="sec">Cancelar</button></div>
+    </div>
     <div id="help" hidden>
       <b>Mapa</b>: «Dibujar muro» → clic a lo largo del borde de cada muro que veas en la ortofoto (haz zoom para más precisión); doble clic para terminar. El muro debe ir de borde a borde del terreno o hasta otro muro.<br>
       <b>3D</b>: clic en un bancal para seleccionarlo · arrastra arriba/abajo para cambiar su altura · o escríbela exacta en el panel.<br>
@@ -172,6 +197,7 @@ $('bDetectar').onclick = async () => {
     const r = await fetch('/api/detectar', { method: 'POST', body: JSON.stringify({ bbox, poly: G.P }) });
     const js = await r.json();
     if (!r.ok) throw new Error(js.error || `HTTP ${r.status}`);
+    G.lastAuto = js.muros;                            // se guarda tal cual para medir cuánto hubo que corregir
     pushUndo();
     G.muros = G.muros.filter(m => !m.auto);          // sustituye una detección anterior, conserva los muros manuales
     for (const m of js.muros) {
@@ -184,6 +210,37 @@ $('bDetectar').onclick = async () => {
       (dud ? ` ${dud} dudosos (amarillo, discontinuo).` : '') + ' Revisa: «Borrar muro» para quitar, «Dibujar muro» para añadir, Ctrl+Z para deshacer todo.');
   } catch (e) { status('Error en la detección: ' + e.message); }
   btn.disabled = false;
+};
+
+// ---------- Guardar como ejemplo (Fase 1: datos para entrenar y evaluar) ----------
+const dlg = $('dlgEjemplo');
+$('bEjemplo').onclick = () => {
+  if (!G) return;
+  cancelDraw(); setBorrar(false);
+  $('eRevisado').checked = false; $('eNotas').value = '';
+  dlg.hidden = false;
+};
+$('eCancelar').onclick = () => dlg.hidden = true;
+$('eGuardar').onclick = async () => {
+  if (!$('eRevisado').checked) return status('Marca la casilla de «He revisado todos los muros» antes de guardar.');
+  const cultivo = $('eCultivo').value;
+  if (!G.muros.length && cultivo !== 'invernadero_llano' && !confirm('No hay ningún muro. ¿Guardar igualmente como parcela SIN bancales?')) return;
+  const xs = G.P.map(p => p[0]), ys = G.P.map(p => p[1]);
+  const bbox = [Math.min(...xs) - 5, Math.min(...ys) - 5, Math.max(...xs) + 5, Math.max(...ys) + 5];
+  // los muros se guardan como la curva suavizada que usa el gemelo (lo que ve el usuario)
+  const muros = G.muros.map(m => ({ pts: catmull(m.ll.map(toUTM), 16), origen: m.auto ? 'auto' : 'manual' }));
+  const body = { bbox, poly: G.P, muros, muros_auto: G.lastAuto || null,
+    meta: { cultivo, arboles_por_bancal: $('eArboles').value, dificultad: $('eDificultad').value, notas: $('eNotas').value.trim(),
+            criterio_muro: 'borde_superior_talud', n_bancales_editor: G.regions.length } };
+  $('eGuardar').disabled = true; status('Guardando ejemplo (descargando ortofoto y relieve a máxima resolución)…');
+  try {
+    const r = await fetch('/api/ejemplo', { method: 'POST', body: JSON.stringify(body) });
+    const js = await r.json();
+    if (!r.ok) throw new Error(js.error || `HTTP ${r.status}`);
+    dlg.hidden = true;
+    status(`Ejemplo guardado: ${js.id} (${js.split === 'test' ? 'reservado para test' : 'para ajustar/entrenar'}). Total en el dataset: ${js.total}.`);
+  } catch (e) { status('Error guardando el ejemplo: ' + e.message); }
+  $('eGuardar').disabled = false;
 };
 
 // =====================================================================================
@@ -539,7 +596,7 @@ $('bGenerar').onclick = async () => {
     G = { nx, ny, res, x0, y1, raw, rawRel, mask, hmin, hmax, area: areaUTM(P), mdtRes: mdt.cellsize, P,
           muros: [], manualH: new Map(), undo: [], sel: null, regions: null };
     murosLayer.clearLayers();
-    ['bModo', 'bTex', 'bMuro', 'bBorrar', 'bDetectar'].forEach(id => $(id).disabled = false);
+    ['bModo', 'bTex', 'bMuro', 'bBorrar', 'bDetectar', 'bEjemplo'].forEach(id => $(id).disabled = false);
     $('help').hidden = false;
     showGemelo = true; $('bModo').textContent = 'Ver: gemelo';
     G.regions = null; buildMeshAfter();

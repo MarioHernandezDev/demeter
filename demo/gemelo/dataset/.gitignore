@@ -1,0 +1,4 @@
+# Los ejemplos (ortofotos, relieve, máscaras) pesan varios MB: se comparten aparte, no por git
+*
+!.gitignore
+!README.md

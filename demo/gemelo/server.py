@@ -13,6 +13,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 import bancales_cv  # detección automática de muros (mismo directorio)
+import dataset_io   # guardado de ejemplos etiquetados (Fase 1 del plan de mejora)
 
 PORT = 8765
 UPSTREAM = {
@@ -71,7 +72,7 @@ class Handler(SimpleHTTPRequestHandler):
     def do_POST(self):
         """POST /api/detectar  {bbox: [x0, y0, x1, y1], poly: [[x, y], ...]} (EPSG:25830)
         → {muros: [{pts: [[x, y], ...], conf}], segundos}"""
-        if self.path != "/api/detectar":
+        if self.path not in ("/api/detectar", "/api/ejemplo"):
             self.send_error(404); return
         import json
         import time
@@ -79,10 +80,14 @@ class Handler(SimpleHTTPRequestHandler):
             req = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))))
             x0, y0, x1, y1 = map(float, req["bbox"])
             if x1 - x0 > 450 or y1 - y0 > 450:
-                raise ValueError("Zona demasiado grande para detectar (máx. ~450 m de lado). Dibuja un terreno más pequeño.")
-            t = time.time()
-            muros = bancales_cv.detectar(x0, y0, x1, y1, poly=req.get("poly"))
-            body, code = json.dumps({"muros": muros, "segundos": round(time.time() - t, 1)}).encode(), 200
+                raise ValueError("Zona demasiado grande (máx. ~450 m de lado). Dibuja un terreno más pequeño.")
+            if self.path == "/api/ejemplo":
+                # POST /api/ejemplo {bbox, poly, muros, muros_auto, meta} → guarda un ejemplo etiquetado en dataset/
+                body, code = json.dumps(dataset_io.guardar_ejemplo(req)).encode(), 200
+            else:
+                t = time.time()
+                muros = bancales_cv.detectar(x0, y0, x1, y1, poly=req.get("poly"))
+                body, code = json.dumps({"muros": muros, "segundos": round(time.time() - t, 1)}).encode(), 200
         except Exception as e:  # noqa: BLE001 — demo: devolver el error legible al navegador
             body, code = json.dumps({"error": str(e)}).encode(), 500
         self.send_response(code)
