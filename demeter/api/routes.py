@@ -11,24 +11,31 @@ Permisos (login real con bcrypt y JWT, ver ``auth.py``; usuarios de ejemplo hast
 La ingesta (``POST /api/sensors/{id}/data``) no usa usuario sino la cabecera ``X-API-Key``.
 """
 
+import asyncio
 import hmac
+import json
 import os
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, WebSocket, WebSocketDisconnect, WebSocketException
 
 from demeter.api import sample_data as d
 from demeter.api import schemas as s
 from demeter.api.auth import ADMIN, ANY, EDITOR, UserStore, authenticate, get_user_store
 from demeter.api.geo import polygon_area_m2
-from demeter.api.security import create_access_token
+from demeter.api.security import create_access_token, decode_access_token
 from demeter.db import conexion
 from demeter.db import repositorio as repo
+from demeter.services.alert_rules import card_status
 from demeter.services.alerts import evaluar_lectura
 
 VERSION = "0.1.0-contrato"
 INGEST_KEY = os.environ.get("DEMETER_INGEST_KEY", "demo-ingest-key")
+
+RECENT_POINTS = 20  # valores del mini histórico de cada tarjeta
+DASHBOARD_ALERTS = 5  # alertas que enseña el dashboard
+WS_POLL_SECONDS = 2.0  # cada cuánto mira la BD el WebSocket del dashboard
 
 router = APIRouter(prefix="/api")
 
@@ -297,34 +304,147 @@ def ingest_history(
 # ---------------------------------------------------------------- dashboard, alertas, clima, agua
 
 
-@router.get("/dashboard", response_model=s.DashboardSummary, tags=["dashboard"])
-def dashboard(parcel_id: int = Query(default=1), _: s.User = ANY):
-    parcel = _parcel(parcel_id)
+def build_dashboard(parcel_id: int, user: s.User) -> s.DashboardSummary:
+    """El resumen del dashboard de una parcela, tal y como lo ve ``user`` (lo usan GET y WebSocket)."""
+    parcel, _ = _visible_parcel(parcel_id, user)
+    now = datetime.now(timezone.utc)
+    sensors = repo.parcel_sensors(parcel_id)
+    if user.role == "lector":
+        sensors = [x for x in sensors if x.is_active]
+    last = repo.last_readings(parcel_id)
     snaps = []
-    for sensor in d.parcel_sensors(parcel_id):
-        last = d.last_reading(sensor)
-        status = d.compute_status(last.value if last else None, sensor.threshold_low, sensor.threshold_high)
-        snaps.append(s.SensorSnapshot(sensor=sensor, last=last, status=status))
-    alerts = d.alerts(parcel_id)
+    for sensor in sensors:
+        reading = last.get(sensor.id)
+        snaps.append(s.SensorSnapshot(
+            sensor=sensor,
+            last=reading,
+            status=card_status(
+                reading.value if reading else None, reading.timestamp if reading else None,
+                now, sensor.threshold_low, sensor.threshold_high,
+            ),
+            recent=[r.value for r in repo.readings(sensor.id, limit=RECENT_POINTS)],
+        ))
+    # Las 5 más recientes, las activas primero y después las ya resueltas.
+    alerts, _total = repo.list_alerts(parcel_id=parcel_id, active=True, limit=DASHBOARD_ALERTS)
+    if len(alerts) < DASHBOARD_ALERTS:
+        alerts += repo.list_alerts(
+            parcel_id=parcel_id, active=False, limit=DASHBOARD_ALERTS - len(alerts)
+        )[0]
+    unread = repo.list_alerts(parcel_id=parcel_id, unread_only=True, limit=0)[1]
     return s.DashboardSummary(
         parcel=s.Parcel(**parcel.model_dump(exclude={"boundary"})),
-        sensors=snaps, alerts=alerts, unread_alerts=sum(not a.acknowledged for a in alerts),
-        updated_at=d.utc_now(), weather=d.weather(parcel_id), water=d.water(parcel_id),
+        sensors=snaps, alerts=alerts, unread_alerts=unread,
+        updated_at=now, weather=d.weather(parcel_id), water=d.water(parcel_id),
     )
 
 
+@router.get("/dashboard", response_model=s.DashboardSummary, tags=["dashboard"])
+def dashboard(parcel_id: int = Query(default=1), user: s.User = ANY):
+    """Último valor de cada sensor, alertas recientes, clima y agua de la parcela.
+
+    Sensores y alertas salen de la base de datos. ``weather`` y ``water`` siguen siendo de
+    ejemplo hasta que existan los endpoints de clima y agua. Para recibirlo sin preguntar cada
+    pocos segundos, ver el WebSocket ``/api/ws/dashboard``.
+    """
+    return build_dashboard(parcel_id, user)
+
+
+@router.websocket("/ws/dashboard")
+async def dashboard_ws(
+    websocket: WebSocket,
+    parcel_id: int = Query(default=1),
+    token: str = Query(default=""),
+    store: UserStore = Depends(get_user_store),
+):
+    """El dashboard en vivo: se envía al conectar y de nuevo cada vez que algo cambia.
+
+    - Un navegador no puede poner cabeceras en un WebSocket, así que el token JWT del login va
+      en la URL: ``/api/ws/dashboard?parcel_id=1&token=...``.
+    - Cada mensaje es ``{"type": "dashboard", "data": <lo mismo que GET /api/dashboard>}``.
+    - El servidor mira la BD cada ``WS_POLL_SECONDS`` y solo envía si cambió algo (no cuenta
+      ``updated_at``). Si el cliente manda ``ping`` responde ``{"type": "pong"}``.
+    - Se cierra con el código 1008 si el token falta o no vale, si la parcela no existe o no se
+      puede ver, o si más tarde el token caduca o el usuario es dado de baja.
+    """
+    def current():
+        user_id = decode_access_token(token)
+        stored = store.get_by_id(user_id) if user_id is not None else None
+        return stored.user if stored and stored.user.is_active else None
+
+    user = current()
+    if user is None:
+        raise WebSocketException(code=1008, reason="Token no válido")
+    try:
+        await asyncio.to_thread(build_dashboard, parcel_id, user)
+    except HTTPException:
+        raise WebSocketException(code=1008, reason="Parcela no encontrada")
+
+    await websocket.accept()
+    sent = None
+    try:
+        while True:
+            user = current()
+            if user is None:
+                await websocket.close(code=1008, reason="Token caducado o usuario de baja")
+                return
+            try:
+                summary = await asyncio.to_thread(build_dashboard, parcel_id, user)
+            except HTTPException:  # la dieron de baja mientras tanto
+                await websocket.close(code=1008, reason="Parcela no disponible")
+                return
+            snapshot = summary.model_dump_json(exclude={"updated_at"})
+            if snapshot != sent:
+                sent = snapshot
+                await websocket.send_json(
+                    {"type": "dashboard", "data": json.loads(summary.model_dump_json())}
+                )
+            try:
+                # Esperar un mensaje del cliente hace de temporizador y a la vez avisa si se va.
+                message = await asyncio.wait_for(websocket.receive_text(), WS_POLL_SECONDS)
+                if message.strip() == "ping":
+                    await websocket.send_json({"type": "pong"})
+            except asyncio.TimeoutError:
+                pass
+    except WebSocketDisconnect:
+        return
+
+
 @router.get("/alerts", response_model=list[s.Alert], tags=["alertas"])
-def list_alerts(parcel_id: Optional[int] = None, unread_only: bool = False, _: s.User = ANY):
-    out = d.alerts(parcel_id)
-    return [a for a in out if not a.acknowledged] if unread_only else out
+def list_alerts(
+    response: Response,
+    parcel_id: Optional[int] = None,
+    unread_only: bool = False,
+    type: Optional[s.AlertType] = None,
+    sensor_id: Optional[str] = None,
+    active: Optional[bool] = Query(default=None, description="true: activas; false: resueltas"),
+    limit: int = Query(default=20, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    user: s.User = ANY,
+):
+    """Alertas, las más recientes primero. La cabecera ``X-Total-Count`` dice cuántas hay en total."""
+    if parcel_id is not None:
+        _visible_parcel(parcel_id, user)
+    page, total = repo.list_alerts(
+        parcel_id=parcel_id, unread_only=unread_only, alert_type=type, sensor_id=sensor_id,
+        active=active, limit=limit, offset=offset,
+    )
+    response.headers["X-Total-Count"] = str(total)
+    return page
+
+
+@router.post("/alerts/ack-all", response_model=s.AckAllResult, tags=["alertas"])
+def acknowledge_all_alerts(parcel_id: int = Query(), user: s.User = EDITOR):
+    """Marca como leídas todas las alertas sin leer de la parcela."""
+    _visible_parcel(parcel_id, user)
+    return s.AckAllResult(updated=repo.acknowledge_all(parcel_id))
 
 
 @router.patch("/alerts/{alert_id}", response_model=s.Alert, tags=["alertas"])
 def update_alert(alert_id: int, body: s.AlertUpdate, _: s.User = EDITOR):
-    alert = next((a for a in d.alerts() if a.id == alert_id), None)
+    alert = repo.set_acknowledged(alert_id, body.acknowledged)
     if alert is None:
         raise HTTPException(404, "Alerta no encontrada")
-    return alert.model_copy(update={"acknowledged": body.acknowledged})
+    return alert
 
 
 @router.get("/parcels/{parcel_id}/weather", response_model=s.Weather, tags=["clima"])
