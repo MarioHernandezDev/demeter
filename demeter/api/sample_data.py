@@ -13,6 +13,7 @@ from typing import Optional
 
 from demeter.api import schemas as s
 from demeter.api.geo import offset, polygon_area_m2, rectangle
+from demeter.services.forecast import predict_sensor
 
 # Centro de la «Finca La Costa» (Carchuna, Motril) y de la «Huerta del Río».
 _LAT1, _LON1 = 36.7174, -3.4301
@@ -286,39 +287,8 @@ def weather(parcel_id: int) -> s.Weather:
 
 
 def prediction(sensor: s.Sensor) -> Optional[s.SensorPrediction]:
-    """Predicción de EJEMPLO a 24 h: prolonga la curva del sensor con una banda que se ensancha.
-
-    El modelo real es el de predicción (E4). Aquí solo importa la forma de la respuesta.
-    """
-    last = last_reading(sensor)
-    if last is None:
-        return None
-    now = utc_now()
-    top = now.replace(minute=0, second=0)
-    points = []
-    for h in range(1, 25):
-        t = top + timedelta(hours=h)
-        v = _value(sensor.id, t, now)
-        m = 0.5 + 0.15 * h  # la incertidumbre crece con el tiempo
-        lo, hi = v - m, v + m
-        if sensor.unit == "%":
-            v, lo, hi = (min(100.0, max(0.0, x)) for x in (v, lo, hi))
-        points.append(s.PredictionPoint(time=t, value=round(v, 1), lower=round(lo, 1), upper=round(hi, 1)))
-    crossing = None
-    if compute_status(last.value, sensor.threshold_low, sensor.threshold_high) == "ok":
-        for p in points:
-            st = compute_status(p.value, sensor.threshold_low, sensor.threshold_high)
-            if st != "ok":
-                crossing = s.ThresholdCrossing(type=st, at=p.time, value=p.value)
-                break
-    delta = points[-1].value - points[0].value
-    span = (sensor.threshold_high - sensor.threshold_low) if None not in (
-        sensor.threshold_low, sensor.threshold_high) else max(abs(points[0].value), 1.0)
-    trend = "stable" if abs(delta) < 0.05 * span else ("rising" if delta > 0 else "falling")
-    return s.SensorPrediction(
-        sensor_id=sensor.id, type=sensor.type, unit=sensor.unit, generated_at=now,
-        model="ejemplo-v0", trend=trend, crossing=crossing, points=points,
-    )
+    """Predicción a 24 h con el motor real (E4, #5) sobre las lecturas de ejemplo del sensor."""
+    return predict_sensor(sensor, ((r.timestamp, r.value) for r in readings(sensor)), utc_now())
 
 
 def irrigation(parcel_id: int) -> s.IrrigationAdvice:

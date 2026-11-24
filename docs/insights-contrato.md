@@ -93,11 +93,27 @@ Pensado para pintar sobre la gráfica del sensor: la línea con `value`, el áre
   ser `null` (p. ej. sin sensor de humedad de suelo): entonces el consejo es `wait`.
 - Solo se riegan zonas de tipo `crop`. Las horas de `start_at` son UTC; la interfaz las muestra en hora local.
 
-## 3. Lo que el ejemplo no hace (lo harán E4 y E5)
+## 3. Cómo se calcula
 
-Las reglas de `sample_data.py` son de juguete (suelo bajo + poca lluvia → regar; 2 L/m²; caudal de
-300 L/min). Solo garantizan que la **forma** de la respuesta es la acordada. El umbral de «hace falta
-regar», los litros por m² y el caudal reales los define el recomendador (E5).
+### Predicción (E4, #5) · `demeter/services/forecast.py` · pruebas en `tests/test_forecast.py`
+
+Las lecturas se agrupan en medias por hora (cada lectura cuenta en su hora en punto más cercana).
+Hacen falta **al menos 3 horas distintas con datos** y que la última lectura tenga **menos de 3 h**;
+si no, la API responde 404 («sin datos suficientes»). Hay dos modelos (`model` dice cuál se usó):
+
+| Modelo | Sensores | Cómo prevé |
+|---|---|---|
+| `ciclo-diario-v1` | temperatura, humedad ambiente, luminosidad (con ≥ 20 h de historia) | El valor de ayer a esa misma hora, más la diferencia «hoy frente a ayer» de las últimas 3 h, que se va olvidando (se reduce a la mitad cada ~8 h). |
+| `tendencia-lineal-v1` | humedad del suelo, nivel de depósito y los de ciclo diario con poca historia | Recta de mínimos cuadrados de las últimas 6 h, prolongada. |
+
+La banda es del 80 %: `±1,28·σ·√h`, donde σ es el error del modelo sobre el pasado reciente (como
+mínimo, el 2 % del rango entre umbrales) y h las horas de distancia. Los porcentajes se recortan a 0–100.
+
+### Consejo de riego (E5, #7)
+
+Las reglas de `sample_data.py` siguen siendo de juguete (suelo bajo + poca lluvia → regar; 2 L/m²;
+caudal de 300 L/min) hasta que el recomendador (E5) defina el umbral de «hace falta regar», los
+litros por m² y el caudal reales.
 
 ## 4. Relación con lo existente
 
