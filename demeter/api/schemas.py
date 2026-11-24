@@ -73,6 +73,8 @@ class User(BaseModel):
     username: str
     role: Role = "tecnico"
     is_active: bool = True
+    email: Optional[str] = None
+    email_verified: bool = False
 
 
 class LoginResponse(BaseModel):
@@ -86,7 +88,8 @@ class LoginResponse(BaseModel):
 class UserCreate(BaseModel):
     """Cuerpo de ``POST /api/users`` (solo admin)."""
 
-    username: str = Field(min_length=1)
+    username: str = Field(min_length=1, pattern=r"^[^@\s]+$")  # sin «@»: un texto con «@» es un correo
+    email: str = Field(pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$", max_length=254)
     password: str = Field(min_length=8, max_length=72)  # bcrypt solo lee 72 bytes
     role: Role = "tecnico"
 

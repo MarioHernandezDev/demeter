@@ -185,8 +185,9 @@ def test_no_se_reactiva_un_sensor_de_una_parcela_de_baja():
 
 
 def test_sin_base_de_datos_preparada_avisa_con_503_y_dice_que_hacer(monkeypatch):
+    headers = auth()  # el login ya lee de la BD: se hace antes de dejarla sin tablas
     # motor en memoria SIN tablas: lo que pasa si nadie ha ejecutado ``reflex db migrate``
     monkeypatch.setattr(conexion, "_engine", conexion.make_engine("sqlite://"))
-    r = client.get("/api/parcels", headers=auth())
+    r = client.get("/api/parcels", headers=headers)
     assert r.status_code == 503
     assert "reflex db migrate" in r.json()["detail"]

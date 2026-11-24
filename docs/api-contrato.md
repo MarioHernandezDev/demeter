@@ -27,8 +27,10 @@ En `/docs`: `POST /api/auth/login` con `admin` / `demo1234` → copia el `access
 Usuarios de ejemplo: `admin`, `tecnico`, `lector` (misma contraseña). El login es real: contraseñas
 con bcrypt y token JWT firmado que caduca a los 60 min (`DEMETER_JWT_MINUTES`; el secreto va en
 `DEMETER_JWT_SECRET`). El token solo lleva el id: el rol y si el usuario sigue activo se leen en
-cada petición, así que una baja o un cambio de rol valen al instante. Hasta que la BD tenga
-usuarios (seed, #14) los usuarios son los de ejemplo, en `demeter/api/auth.py` (`UserStore`). Ingesta: cabecera
+cada petición, así que una baja o un cambio de rol valen al instante. Los usuarios están en la
+tabla `users` (`DbUserStore` en `demeter/api/auth.py`). Se puede entrar con el **nombre de usuario
+o con el correo** (un texto con `@` se toma como correo; el correo no distingue mayúsculas). Un
+usuario que solo entra con Google no tiene contraseña: con contraseña siempre da 401. Ingesta: cabecera
 `X-API-Key: demo-ingest-key` (variable de entorno `DEMETER_INGEST_KEY` para cambiarla).
 
 ## Convenciones
@@ -46,7 +48,9 @@ usuarios (seed, #14) los usuarios son los de ejemplo, en `demeter/api/auth.py` (
 |---|---|---|
 | GET `/api/health` | — | Estado |
 | POST `/api/auth/login` · GET `/api/auth/me` | — · cualquiera | Sesión |
-| GET/POST `/api/users` · PATCH `/api/users/{id}` | admin | Gestión de usuarios |
+| GET `/api/users` | admin | Todos los usuarios, también los de baja (con `email` y `email_verified`, nunca la contraseña) |
+| POST `/api/users` | admin | Crea un usuario: `username` (sin `@`), `email`, `password` (8–72), `role`. La contraseña se guarda con bcrypt. Nombre o correo repetidos (sin mirar mayúsculas): 409 |
+| PATCH `/api/users/{id}` | admin | Cambia `role` o `is_active` (baja o reactivación; no se borra). Un admin no puede quitarse a sí mismo el rol ni darse de baja (409). `null` da 422 |
 | GET `/api/parcels` · `/api/parcels/{id}` | lector | Parcelas (`?include_inactive=true` solo admin) |
 | PATCH `/api/parcels/{id}` | admin | Dar de baja o reactivar (`{"is_active": false}`), con todos sus sensores |
 | PUT `/api/parcels/{id}/boundary` | tecnico | Contorno dibujado (calcula m²) |

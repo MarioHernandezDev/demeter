@@ -24,7 +24,7 @@ from demeter.api import sample_data as d
 from demeter.api import schemas as s
 from demeter.api.auth import ADMIN, ANY, EDITOR, UserStore, authenticate, get_user_store
 from demeter.api.geo import polygon_area_m2
-from demeter.api.security import create_access_token, decode_access_token
+from demeter.api.security import create_access_token, decode_access_token, hash_password
 from demeter.db import conexion
 from demeter.db import repositorio as repo
 from demeter.services.alert_rules import card_status
@@ -83,22 +83,50 @@ def me(user: s.User = ANY):
 
 @router.get("/users", response_model=list[s.User], tags=["usuarios"])
 def list_users(_: s.User = ADMIN):
-    return list(d.USERS.values())
+    """Todos los usuarios, también los dados de baja (solo admin)."""
+    return repo.list_users()
 
 
 @router.post("/users", response_model=s.User, status_code=201, tags=["usuarios"])
 def create_user(body: s.UserCreate, _: s.User = ADMIN):
-    if body.username in d.USERS:
-        raise HTTPException(409, "Ese nombre de usuario ya existe")
-    return s.User(id=d.new_id(), username=body.username, role=body.role)
+    """Crea un usuario con contraseña. La contraseña se guarda cifrada (bcrypt) y nunca se devuelve.
+
+    Nombre de usuario o correo ya usados: 409. El correo se guarda en minúsculas.
+    """
+    try:
+        return repo.create_user(
+            username=body.username, email=body.email, role=body.role,
+            password_hash=hash_password(body.password),
+        )
+    except repo.AlreadyExistsError as e:
+        raise HTTPException(409, str(e))
+    except ValueError as e:
+        raise HTTPException(422, str(e))
 
 
 @router.patch("/users/{user_id}", response_model=s.User, tags=["usuarios"])
-def update_user(user_id: int, body: s.UserUpdate, _: s.User = ADMIN):
-    user = next((u for u in d.USERS.values() if u.id == user_id), None)
-    if user is None:
+def update_user(user_id: int, body: s.UserUpdate, admin: s.User = ADMIN):
+    """Cambia el rol o da de baja o reactiva a un usuario (no se borra). Solo lo enviado.
+
+    Para no quedarse sin acceso, un admin no puede quitarse a sí mismo el rol ni darse de baja,
+    y siempre debe quedar al menos un admin activo (409).
+    """
+    changes = body.model_dump(exclude_unset=True)
+    if any(changes.get(k) is None for k in changes):
+        raise HTTPException(422, "role e is_active no pueden ser null")
+    target = next((u for u in repo.list_users() if u.id == user_id), None)
+    if target is None:
         raise HTTPException(404, "Usuario no encontrado")
-    return user.model_copy(update=body.model_dump(exclude_none=True))
+    quita_admin = target.role == "admin" and target.is_active and (
+        changes.get("role", "admin") != "admin" or changes.get("is_active", True) is False
+    )
+    if quita_admin:
+        if target.id == admin.id:
+            raise HTTPException(409, "No puedes quitarte a ti mismo el rol de admin ni darte de baja")
+        if sum(u.role == "admin" and u.is_active for u in repo.list_users()) <= 1:
+            raise HTTPException(409, "Debe quedar al menos un admin activo")
+    updated = repo.update_user(user_id, changes) if changes else target
+    return updated
 
 
 # ---------------------------------------------------------------- parcelas y sensores

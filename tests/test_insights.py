@@ -35,7 +35,13 @@ def _token() -> dict:
     return {"Authorization": f"Bearer {r.json()['access_token']}"}
 
 
-HEADERS = _token()
+HEADERS: dict = {}  # se rellena en cada prueba, cuando ya hay base de datos con usuarios
+
+
+@pytest.fixture(autouse=True)
+def _sesion(api_db):
+    HEADERS.clear()
+    HEADERS.update(_token())
 
 
 # ------------------------------------------------------------------ comprobaciones del contrato
