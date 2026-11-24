@@ -9,6 +9,9 @@ from demeter.state.types import DashboardSummary as UiDashboard  # contrato de l
 
 client = TestClient(api)
 
+# Las rutas de parcelas y sensores leen de la base de datos (con el seed): ver ``conftest.py``.
+pytestmark = pytest.mark.usefixtures("api_db")
+
 
 _tokens: dict = {}
 
@@ -43,7 +46,7 @@ def test_dashboard_lo_entiende_la_interfaz():
 
 
 def test_sensores_y_umbrales_solo_admin():
-    assert len(client.get("/api/parcels/1/sensors", headers=auth()).json()) == 6
+    assert len(client.get("/api/parcels/1/sensors", headers=auth()).json()) == 5
     body = {"threshold_high": 40}
     assert client.patch("/api/sensors/t001", json=body, headers=auth("tecnico")).status_code == 403
     assert client.patch("/api/sensors/t001", json=body, headers=auth("admin")).json()["threshold_high"] == 40

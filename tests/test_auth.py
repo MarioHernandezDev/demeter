@@ -14,6 +14,9 @@ from demeter.api.auth import DemoUserStore, StoredUser, get_user_store
 
 client = TestClient(api)
 
+# ``/api/parcels`` lee de la base de datos: ver ``conftest.py``.
+pytestmark = pytest.mark.usefixtures("api_db")
+
 
 def login(username="admin", password="demo1234"):
     return client.post("/api/auth/login", json={"username": username, "password": password})
