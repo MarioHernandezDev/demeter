@@ -14,6 +14,8 @@ import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import OperationalError
 
@@ -58,3 +60,14 @@ def database_not_ready(_: Request, __: OperationalError):
             "`python -m demeter.db.seed`."
         },
     )
+
+
+@api.exception_handler(RequestValidationError)
+def invalid_request(_: Request, exc: RequestValidationError):
+    """Un 422 normal, pero sin devolver el valor recibido (``input``).
+
+    Con ``NaN`` o ``Infinity`` en el cuerpo, el aviso de error de FastAPI repite ese valor y al
+    convertirlo a JSON falla: el cliente recibía un 500 en vez de un 422.
+    """
+    errors = [{k: v for k, v in e.items() if k not in ("input", "ctx")} for e in exc.errors()]
+    return JSONResponse(status_code=422, content={"detail": jsonable_encoder(errors)})

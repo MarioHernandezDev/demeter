@@ -11,7 +11,9 @@ Permisos (login real con bcrypt y JWT, ver ``auth.py``; usuarios de ejemplo hast
 La ingesta (``POST /api/sensors/{id}/data``) no usa usuario sino la cabecera ``X-API-Key``.
 """
 
+import hmac
 import os
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
@@ -21,7 +23,9 @@ from demeter.api import schemas as s
 from demeter.api.auth import ADMIN, ANY, EDITOR, UserStore, authenticate, get_user_store
 from demeter.api.geo import polygon_area_m2
 from demeter.api.security import create_access_token
+from demeter.db import conexion
 from demeter.db import repositorio as repo
+from demeter.services.alerts import evaluar_lectura
 
 VERSION = "0.1.0-contrato"
 INGEST_KEY = os.environ.get("DEMETER_INGEST_KEY", "demo-ingest-key")
@@ -189,32 +193,105 @@ def update_sensor(sensor_id: str, body: s.SensorUpdate, user: s.User = EDITOR):
     return updated
 
 
+def _readable_sensor(sensor_id: str, user: s.User) -> s.Sensor:
+    """El sensor, si el usuario puede verlo (un lector no ve los dados de baja ni los de parcelas de baja)."""
+    sensor = repo.get_sensor(sensor_id)
+    if sensor is None or (user.role == "lector" and not sensor.is_active):
+        raise HTTPException(404, "Sensor no encontrado")
+    _visible_parcel(sensor.parcel_id, user)
+    return sensor
+
+
 @router.get("/sensors/{sensor_id}/data", response_model=list[s.Reading], tags=["sensores"])
 def sensor_data(
     sensor_id: str,
     limit: int = Query(default=100, ge=1, le=1000),
     since: Optional[str] = Query(default=None, description="ISO 8601; solo lecturas posteriores"),
-    _: s.User = ANY,
+    user: s.User = ANY,
 ):
-    series = d.readings(_sensor(sensor_id))
+    """Las últimas ``limit`` lecturas, de la más antigua a la más reciente."""
+    _readable_sensor(sensor_id, user)
+    t0 = None
     if since:
-        from datetime import datetime
-
         try:
             t0 = datetime.fromisoformat(since.replace("Z", "+00:00"))
         except ValueError:
             raise HTTPException(422, "«since» debe ser una fecha ISO 8601")
-        series = [r for r in series if r.timestamp > t0]
-    return series[-limit:]
+    return repo.readings(sensor_id, since=t0, limit=limit)
+
+
+# Lo que se admite como hora de una lectura en vivo: algo de margen hacia atrás (una placa
+# puede reenviar lo que no pudo mandar) y casi nada hacia delante (un reloj mal puesto).
+MAX_PAST = timedelta(hours=24)
+MAX_FUTURE = timedelta(minutes=5)
+# El histórico puede ser tan antiguo como se quiera, pero no de antes de que existiera el sistema:
+# las placas sin reloj arrancan en 1970 y eso es un error, no un dato.
+OLDEST_HISTORY = datetime(2000, 1, 1, tzinfo=timezone.utc)
+
+
+def _check_ingest_key(x_api_key: Optional[str]) -> None:
+    if not x_api_key or not hmac.compare_digest(x_api_key.encode(), INGEST_KEY.encode()):
+        raise HTTPException(401, "X-API-Key incorrecta")
+
+
+def _utc(value: datetime) -> datetime:
+    return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
 
 
 @router.post("/sensors/{sensor_id}/data", response_model=s.IngestResult, tags=["ingesta"])
 def ingest(sensor_id: str, body: s.ReadingIn, x_api_key: Optional[str] = Header(default=None)):
-    """Entrada de lecturas del simulador. Una lectura repetida (mismo sensor y hora) se ignora."""
-    if x_api_key != INGEST_KEY:
-        raise HTTPException(401, "X-API-Key incorrecta")
-    _sensor(sensor_id)
-    return s.IngestResult(sensor_id=sensor_id, timestamp=body.timestamp, stored=True)
+    """Entrada de lecturas en vivo (cabecera ``X-API-Key``).
+
+    - Sin ``timestamp`` se usa la hora de llegada. Con él, debe estar entre 24 h atrás y 5 min
+      por delante de la hora del servidor (si no, 422).
+    - Una lectura repetida (mismo sensor y hora) se ignora: ``stored=false, duplicate=true``.
+    - La lectura y sus alertas se guardan en una sola transacción. Solo una lectura nueva y no
+      atrasada puede abrir o cerrar alertas (lo decide el motor de alertas).
+    """
+    _check_ingest_key(x_api_key)
+    now = datetime.now(timezone.utc)
+    when = _utc(body.timestamp) if body.timestamp else now
+    if when < now - MAX_PAST or when > now + MAX_FUTURE:
+        raise HTTPException(
+            422, "La hora de la lectura debe estar entre 24 h antes y 5 min después de la del servidor"
+        )
+    with conexion.open_session() as session:
+        try:
+            result = repo.save_reading(sensor_id, when, body.value, session=session)
+        except repo.NotFoundError:
+            raise HTTPException(404, "Sensor no encontrado")
+        if result.stored:
+            evaluar_lectura(session, sensor_id, when, body.value)
+        session.commit()
+    return result
+
+
+@router.post("/sensors/{sensor_id}/data/batch", response_model=s.BatchResult, tags=["ingesta"])
+def ingest_history(
+    sensor_id: str, body: s.ReadingBatchIn, x_api_key: Optional[str] = Header(default=None)
+):
+    """Carga de histórico (hasta 1000 lecturas por llamada), con ``X-API-Key``.
+
+    Guarda todo o nada. **No genera alertas**: es historia, no lo que pasa ahora. Las repetidas
+    se cuentan en ``duplicates`` y no son un error. Las horas deben ser de 2000 en adelante y
+    no pasarse de 5 min del futuro.
+    """
+    _check_ingest_key(x_api_key)
+    limit = datetime.now(timezone.utc) + MAX_FUTURE
+    points = [(_utc(p.timestamp), p.value) for p in body.readings]
+    if any(t < OLDEST_HISTORY or t > limit for t, _ in points):
+        raise HTTPException(422, "Hay lecturas con una hora anterior al año 2000 o en el futuro")
+    stored = 0
+    with conexion.open_session() as session:
+        try:
+            for when, value in points:
+                stored += repo.save_reading(sensor_id, when, value, session=session).stored
+        except repo.NotFoundError:
+            raise HTTPException(404, "Sensor no encontrado")
+        session.commit()
+    return s.BatchResult(
+        sensor_id=sensor_id, received=len(points), stored=stored, duplicates=len(points) - stored
+    )
 
 
 # ---------------------------------------------------------------- dashboard, alertas, clima, agua
