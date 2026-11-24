@@ -23,7 +23,7 @@ from sqlmodel import Session, select
 from demeter.api import schemas as s
 from demeter.db import conexion
 from demeter.models import (
-    Alert, Parcel, Sensor, SensorData, Tank, TerrainElement, User, Zone,
+    Alert, Parcel, Sensor, SensorData, Tank, TerrainElement, Transaction, User, Zone,
 )
 
 # ---------------------------------------------------------------------------------------
@@ -865,3 +865,94 @@ def delete_element(element_id: int) -> bool:
         session.delete(row)
         session.commit()
         return True
+
+
+# ---------------------------------------------------------------------------------------
+# Costes (entrega 3)
+#
+# El importe se guarda SIEMPRE en positivo y el signo lo da ``kind`` (``income`` o ``expense``),
+# como en el esquema de la API. Así no hay dos formas de escribir un gasto (-50 o 50 con
+# ``expense``) que luego se sumen mal.
+# ---------------------------------------------------------------------------------------
+
+
+def _transaction(row: Transaction) -> s.Transaction:
+    return s.Transaction(
+        id=row.id,
+        parcel_id=row.parcel_id,
+        kind=row.kind,
+        category=row.category,
+        amount=row.amount,
+        occurred_on=row.occurred_on,
+        description=row.description,
+    )
+
+
+def transactions(parcel_id: int) -> list[s.Transaction]:
+    """Movimientos de la parcela, los más recientes primero (por fecha; a igual fecha, el último
+    apuntado primero). Parcela inexistente o sin movimientos: lista vacía."""
+    with conexion.open_session() as session:
+        rows = session.exec(
+            select(Transaction)
+            .where(Transaction.parcel_id == parcel_id)
+            .order_by(Transaction.occurred_on.desc(), Transaction.id.desc())
+        ).all()
+        return [_transaction(row) for row in rows]
+
+
+def create_transaction(parcel_id: int, body: s.TransactionCreate) -> s.Transaction:
+    """Apunta un ingreso o un gasto. Parcela inexistente: ``NotFoundError``.
+
+    Que el importe sea positivo y la categoría no esté vacía ya lo comprueba el esquema
+    ``TransactionCreate`` antes de llegar aquí.
+    """
+    with conexion.open_session() as session:
+        _require_parcel(session, parcel_id)
+        row = Transaction(
+            parcel_id=parcel_id,
+            kind=body.kind,
+            category=body.category,
+            amount=body.amount,
+            occurred_on=body.occurred_on,
+            description=body.description,
+        )
+        session.add(row)
+        session.commit()
+        return _transaction(row)
+
+
+def balance(parcel_id: int) -> s.Balance:
+    """Ingresos, gastos y saldo de la parcela, y el saldo de cada categoría.
+
+    - ``by_category``: ingresos en positivo y gastos en negativo; si una categoría tiene de los
+      dos, se compensan (p. ej. ``agua``: una devolución de 20 y un recibo de 100 dan -80).
+    - Todo redondeado a 2 decimales (céntimos) AL FINAL: redondear cada sumando por separado
+      acumularía errores.
+    - Parcela inexistente o sin movimientos: todo a 0. Comprobar que la parcela existe es cosa
+      de la API, como en el resto de consultas.
+    """
+    with conexion.open_session() as session:
+        # Las sumas las hace la base de datos (una fila por tipo y categoría), en lugar de traer
+        # todos los movimientos a Python para sumarlos.
+        rows = session.exec(
+            select(Transaction.kind, Transaction.category, func.sum(Transaction.amount))
+            .where(Transaction.parcel_id == parcel_id)
+            .group_by(Transaction.kind, Transaction.category)
+        ).all()
+
+    income = expense = 0.0
+    by_category: dict[str, float] = {}
+    for kind, category, total in rows:
+        signed = total if kind == "income" else -total
+        by_category[category] = by_category.get(category, 0.0) + signed
+        if kind == "income":
+            income += total
+        else:
+            expense += total
+    return s.Balance(
+        parcel_id=parcel_id,
+        income=round(income, 2),
+        expense=round(expense, 2),
+        balance=round(income - expense, 2),
+        by_category={category: round(value, 2) for category, value in sorted(by_category.items())},
+    )

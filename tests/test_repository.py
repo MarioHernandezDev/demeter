@@ -4,7 +4,7 @@ Cada prueba empieza con una base de datos NUEVA y con los mismos datos mínimos 
 que ninguna depende del resultado de otra ni del fichero ``data/demeter.db``.
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 import pytest
 from sqlalchemy import event, text
@@ -12,7 +12,7 @@ from sqlmodel import Session, SQLModel, select
 
 from demeter.api import schemas as s
 from demeter.db import conexion, repositorio
-from demeter.models import Alert, Parcel, Sensor, SensorData, Tank, TerrainElement, User, Zone
+from demeter.models import Alert, Parcel, Sensor, SensorData, Tank, User, Zone
 
 # Contorno de prueba: un cuadradito. Se guarda como TEXTO GeoJSON, igual que hará la API.
 BOUNDARY = s.Polygon(
@@ -1276,3 +1276,95 @@ def test_get_terrain_de_una_parcela_de_baja(db):
 
 def test_get_terrain_parcela_inexistente_devuelve_none(db):
     assert repositorio.get_terrain(999) is None
+
+
+# ---------------------------------------------------------------------------------------
+# Costes
+# ---------------------------------------------------------------------------------------
+
+
+def _move(parcel_id=1, kind="expense", category="agua", amount=100.0, day=1, description=None):
+    return repositorio.create_transaction(
+        parcel_id,
+        s.TransactionCreate(
+            kind=kind, category=category, amount=amount, occurred_on=date(2026, 11, day),
+            description=description,
+        ),
+    )
+
+
+def test_create_transaction_guarda_y_devuelve_el_movimiento(db):
+    move = _move(kind="income", category="venta", amount=1850.0, day=3, description="1.ª partida")
+    assert isinstance(move, s.Transaction) and move.id == 1 and move.parcel_id == 1
+    assert (move.kind, move.category, move.amount) == ("income", "venta", 1850.0)
+    assert move.occurred_on == date(2026, 11, 3) and move.description == "1.ª partida"
+
+
+def test_create_transaction_parcela_inexistente_lanza_not_found(db):
+    with pytest.raises(repositorio.NotFoundError):
+        _move(parcel_id=999)
+
+
+def test_transactions_los_mas_recientes_primero(db):
+    old = _move(day=1)
+    new = _move(day=9)
+    mid = _move(day=5)
+    assert [t.id for t in repositorio.transactions(1)] == [new.id, mid.id, old.id]
+
+
+def test_transactions_misma_fecha_el_ultimo_apuntado_primero(db):
+    first = _move(day=4)
+    second = _move(day=4)
+    assert [t.id for t in repositorio.transactions(1)] == [second.id, first.id]
+
+
+def test_transactions_solo_de_esa_parcela(db):
+    _move(parcel_id=1)
+    other = _move(parcel_id=2)
+    assert [t.id for t in repositorio.transactions(2)] == [other.id]
+
+
+@pytest.mark.parametrize("parcel_id", [3, 999])  # sin movimientos / inexistente
+def test_transactions_sin_movimientos_devuelve_lista_vacia(db, parcel_id):
+    assert repositorio.transactions(parcel_id) == []
+
+
+def test_balance_suma_ingresos_gastos_y_saldo(db):
+    # Los mismos movimientos que había en sample_data, para comprobar que sale igual.
+    _move(kind="income", category="venta", amount=1850.00, day=1)
+    _move(kind="expense", category="agua", amount=126.40, day=2)
+    _move(kind="expense", category="abono", amount=310.00, day=3)
+    _move(kind="expense", category="agua", amount=98.75, day=9)
+    _move(kind="income", category="venta", amount=920.00, day=12)
+    result = repositorio.balance(1)
+    assert isinstance(result, s.Balance) and result.parcel_id == 1
+    assert (result.income, result.expense, result.balance) == (2770.00, 535.15, 2234.85)
+    assert result.by_category == {"abono": -310.00, "agua": -225.15, "venta": 2770.00}
+
+
+def test_balance_compensa_una_categoria_con_ingresos_y_gastos(db):
+    _move(kind="expense", category="agua", amount=100.0)
+    _move(kind="income", category="agua", amount=20.0)  # una devolución
+    result = repositorio.balance(1)
+    assert result.by_category == {"agua": -80.0}
+    assert (result.income, result.expense, result.balance) == (20.0, 100.0, -80.0)
+
+
+def test_balance_redondea_a_centimos_al_final(db):
+    # 0.1 + 0.2 en coma flotante es 0.30000000000000004: debe salir 0.3.
+    _move(kind="income", category="venta", amount=0.1)
+    _move(kind="income", category="venta", amount=0.2)
+    result = repositorio.balance(1)
+    assert result.income == 0.3 and result.by_category == {"venta": 0.3}
+
+
+def test_balance_solo_cuenta_esa_parcela(db):
+    _move(parcel_id=1, amount=50.0)
+    _move(parcel_id=2, amount=999.0)
+    assert repositorio.balance(1).expense == 50.0
+
+
+@pytest.mark.parametrize("parcel_id", [3, 999])  # sin movimientos / inexistente
+def test_balance_sin_movimientos_todo_a_cero(db, parcel_id):
+    result = repositorio.balance(parcel_id)
+    assert (result.income, result.expense, result.balance, result.by_category) == (0, 0, 0, {})
