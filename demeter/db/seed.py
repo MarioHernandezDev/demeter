@@ -1,8 +1,8 @@
 """Datos de ejemplo de la Costa Tropical (B3, issue #14).
 
 Rellena la base de datos con lo mínimo para que la aplicación tenga algo que enseñar:
-3 usuarios, 3 fincas y 14 sensores. NO crea lecturas (de eso se encarga el simulador, #15)
-ni el terreno 3D (zonas, elementos, depósitos y movimientos).
+3 usuarios, 3 fincas, 14 sensores y un depósito de agua por finca. NO crea lecturas (de eso
+se encarga el simulador, #15) ni el terreno 3D (zonas, elementos y movimientos).
 
 Uso, con la base de datos ya migrada (``reflex db migrate``):
 
@@ -19,7 +19,7 @@ from sqlmodel import Session, select
 
 from demeter.api.security import hash_password
 from demeter.db.conexion import open_session
-from demeter.models import Parcel, Sensor, User
+from demeter.models import Parcel, Sensor, Tank, User
 from demeter.models.sensores import UNIDAD_POR_TIPO
 
 # ---------------------------------------------------------------------------------------
@@ -77,6 +77,16 @@ SENSORS = [
     ("d003", "Vega de Motril", "nivel_deposito", "Balsa de riego"),
 ]
 
+# (nombre, finca, capacidad en litros, sensor de nivel). Un depósito por finca, enlazado al
+# sensor ``nivel_deposito`` de esa finca: el nivel del depósito es la última lectura de ese
+# sensor (``repositorio.tanks``). Sin esta tabla, el agua disponible y el consejo de riego no
+# tendrían de dónde sacar los litros. Se llaman igual que la descripción de su sensor.
+TANKS = [
+    ("Balsa norte", "Finca La Costa", 50_000, "d001"),
+    ("Depósito de riego", "Huerta del Río", 20_000, "d002"),
+    ("Balsa de riego", "Vega de Motril", 30_000, "d003"),
+]
+
 
 # ---------------------------------------------------------------------------------------
 # La lógica: «crear si no existe».
@@ -89,7 +99,7 @@ def seed(session: Session) -> dict[str, int]:
     No hace ``commit``: quien la llama decide cuándo guardar. Si algo falla a medias, no
     queda nada guardado (todo o nada).
     """
-    created = {"users": 0, "parcels": 0, "sensors": 0}
+    created = {"users": 0, "parcels": 0, "sensors": 0, "tanks": 0}
 
     # 1. Usuarios. Se buscan por username, que es único.
     # La huella bcrypt lleva sal propia, así que cada usuario tiene una distinta aunque
@@ -150,6 +160,26 @@ def seed(session: Session) -> dict[str, int]:
                 )
             )
             created["sensors"] += 1
+    session.flush()  # los depósitos apuntan a su sensor de nivel: tiene que existir antes
+
+    # 4. Depósitos. No tienen nombre único en toda la base de datos (dos fincas podrían tener
+    # una "Balsa"), así que se buscan por finca y nombre.
+    for name, parcel_name, capacity_l, sensor_id in TANKS:
+        parcel_id = parcels[parcel_name].id
+        exists = session.exec(
+            select(Tank).where(Tank.parcel_id == parcel_id, Tank.name == name)
+        ).first()
+        if exists is None:
+            # Sin latitud ni longitud: la posición se coloca a mano en el editor 3D.
+            session.add(
+                Tank(
+                    parcel_id=parcel_id,
+                    name=name,
+                    capacity_l=capacity_l,
+                    level_sensor_id=sensor_id,
+                )
+            )
+            created["tanks"] += 1
 
     return created
 
@@ -166,8 +196,8 @@ def main() -> int:
         return 1
 
     print(
-        f"Seed listo: {created['users']} usuarios, {created['parcels']} fincas y "
-        f"{created['sensors']} sensores nuevos."
+        f"Seed listo: {created['users']} usuarios, {created['parcels']} fincas, "
+        f"{created['sensors']} sensores y {created['tanks']} depósitos nuevos."
     )
     return 0
 
