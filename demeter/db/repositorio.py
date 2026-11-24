@@ -116,6 +116,39 @@ def get_sensor(sensor_id: str) -> s.Sensor | None:
         return _sensor(row) if row else None
 
 
+# Los únicos campos de un sensor que se pueden cambiar con ``update_sensor``. Lo demás (código,
+# parcela, tipo, unidad, ``last_seen_at``) no se edita: cambiar el tipo de un sensor dejaría sus
+# lecturas con una unidad equivocada, y ``last_seen_at`` solo lo mueve ``save_reading``.
+_SENSOR_EDITABLE = {"threshold_low", "threshold_high", "latitude", "longitude", "is_active"}
+
+
+def update_sensor(sensor_id: str, changes: dict) -> s.Sensor | None:
+    """Cambia SOLO los campos que vienen en ``changes``; el resto no se toca.
+
+    La API le pasa ``body.model_dump(exclude_unset=True)``: un campo ausente significa "no lo
+    cambies" y un campo con ``None`` significa "déjalo vacío" (p. ej. quitar un umbral). Por eso
+    es un diccionario y no argumentos con valor por defecto: así se distingue lo uno de lo otro.
+
+    - Una clave que no sea editable lanza ``ValueError`` y no se cambia NADA, ni siquiera los
+      campos válidos que vinieran con ella.
+    - ``is_active`` no admite ``None`` (es sí o no): lanza ``ValueError``.
+    - Devuelve el sensor ya actualizado, o ``None`` si no existe.
+    """
+    unknown = set(changes) - _SENSOR_EDITABLE
+    if unknown:
+        raise ValueError(f"Campos no editables en un sensor: {sorted(unknown)}")
+    if "is_active" in changes and changes["is_active"] is None:
+        raise ValueError("is_active no puede ser None")
+    with conexion.open_session() as session:
+        row = session.get(Sensor, sensor_id)
+        if row is None:
+            return None
+        for field, value in changes.items():
+            setattr(row, field, value)
+        session.commit()
+        return _sensor(row)
+
+
 def parcel_sensors(parcel_id: int) -> list[s.Sensor]:
     """Todos los sensores de la parcela, incluidos los desactivados (``is_active=False``).
 

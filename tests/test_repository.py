@@ -95,6 +95,61 @@ def test_get_sensor_devuelve_tambien_los_desactivados(db):
 
 
 # ---------------------------------------------------------------------------------------
+# update_sensor
+# ---------------------------------------------------------------------------------------
+
+
+def test_update_sensor_cambia_solo_los_campos_indicados(db):
+    result = repositorio.update_sensor("t001", {"threshold_high": 40.0})
+    assert isinstance(result, s.Sensor)
+    assert result.threshold_high == 40.0
+    assert result.threshold_low == 8  # el que no venía en ``changes`` se queda como estaba
+    assert repositorio.get_sensor("t001").threshold_high == 40.0  # y queda guardado
+
+
+def test_update_sensor_un_none_explicito_deja_el_campo_vacio(db):
+    # t001 tiene threshold_low=8: "ponlo a None" (quitar el umbral) no es lo mismo que "no lo toques".
+    assert repositorio.update_sensor("t001", {"threshold_low": None}).threshold_low is None
+
+
+def test_update_sensor_cambia_la_posicion(db):
+    result = repositorio.update_sensor("t001", {"latitude": 36.7, "longitude": -3.5})
+    assert (result.latitude, result.longitude) == (36.7, -3.5)
+
+
+def test_update_sensor_puede_desactivar_y_reactivar(db):
+    assert repositorio.update_sensor("t001", {"is_active": False}).is_active is False
+    assert repositorio.update_sensor("t001", {"is_active": True}).is_active is True
+
+
+def test_update_sensor_sin_cambios_devuelve_el_sensor_igual(db):
+    assert repositorio.update_sensor("t001", {}) == repositorio.get_sensor("t001")
+
+
+def test_update_sensor_inexistente_devuelve_none(db):
+    assert repositorio.update_sensor("zzz", {"threshold_low": 1.0}) is None
+
+
+@pytest.mark.parametrize("field", ["id", "parcel_id", "type", "unit", "description", "last_seen_at", "otra"])
+def test_update_sensor_rechaza_campos_no_editables(db, field):
+    with pytest.raises(ValueError):
+        repositorio.update_sensor("t001", {field: "x"})
+
+
+def test_update_sensor_si_hay_un_campo_invalido_no_cambia_nada(db):
+    with pytest.raises(ValueError):
+        repositorio.update_sensor("t001", {"threshold_high": 99.0, "type": "luminosidad"})
+    sensor = repositorio.get_sensor("t001")
+    assert sensor.threshold_high is None and sensor.type == "temperatura"  # ni siquiera el válido
+
+
+def test_update_sensor_is_active_no_admite_none(db):
+    with pytest.raises(ValueError):
+        repositorio.update_sensor("t001", {"is_active": None})
+    assert repositorio.get_sensor("t001").is_active is True
+
+
+# ---------------------------------------------------------------------------------------
 # parcel_sensors
 # ---------------------------------------------------------------------------------------
 
