@@ -14,8 +14,22 @@ La web reproduce el prototipo **«Demeter web completa con Demetreo griego»**. 
 | `ok` | `#2f8a63` | **solo** puntos de estado | 3,7:1 (no apto para texto) |
 | `ok_texto` | `#1f6b4c` | texto «en rango» | 5,5:1 |
 | `campo` | `#3e5a22` | fondos de marca (Demetreo) | — |
+| `sin_senal` | `#8a9499` | **solo** punto, borde y mini histórico de un sensor sin señal | 2,7:1 (no apto para texto) |
 
 Todos los textos cumplen WCAG AA (4,5:1).
+
+## Semáforo de las tarjetas de sensor
+
+Lo manda la API en `sensors[].status` (`GET /api/dashboard`). La tabla vive en `theme.ESTADOS_SENSOR`; las clases, en `assets/proto/app.css`.
+
+| `status` | Etiqueta | Clase | Aspecto |
+|---|---|---|---|
+| `ok` | En rango | — | punto verde |
+| `LOW` / `HIGH` | Bajo / Alto | `srow--warn` · `ro is-warn` | cifra y gráfica en terracota |
+| `offline` | Sin señal | `srow--off` · `ro is-off` | tarjeta gris: cifra apagada en `tinta_suave`, gráfica discontinua en `sin_senal`. Gana a «bajo»/«alto» |
+| `sin_datos` | Esperando datos | `srow--wait` | sin cifra ni alarma |
+
+`offline` solo puede venir del servidor (necesita la hora de la última lectura): `Sensor.status_for` nunca lo devuelve.
 
 ## Tipografía
 

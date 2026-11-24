@@ -291,6 +291,8 @@ class Weather(BaseModel):
     updated_at: datetime
     current: WeatherNow
     forecast: list[WeatherHour] = Field(default_factory=list)
+    source: str = "Open-Meteo"
+    stale: bool = False  # true: no se pudo actualizar y son los últimos datos que hubo (hasta 6 h)
 
 
 class Tank(BaseModel):

@@ -33,7 +33,7 @@ def test_la_paleta_coincide_con_la_del_prototipo():
     proto = (prototipo.PLANTILLAS.parent.parent.parent / "assets" / "proto" / "proto.css").read_text()
     app = (prototipo.PLANTILLAS.parent.parent.parent / "assets" / "proto" / "app.css").read_text()
     assert f"--ink: {theme.COLORES['tinta']}" in proto
-    for clave, var in (("acento", "--warn"), ("tinta_suave", "--muted"), ("papel", "--paper")):
+    for clave, var in (("acento", "--warn"), ("tinta_suave", "--muted"), ("papel", "--paper"), ("sin_senal", "--off")):
         assert f"{var}: {theme.COLORES[clave]}" in app
 
 
