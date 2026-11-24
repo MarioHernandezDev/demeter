@@ -22,7 +22,9 @@ from sqlmodel import Session, select
 
 from demeter.api import schemas as s
 from demeter.db import conexion
-from demeter.models import Alert, Parcel, Sensor, SensorData, User
+from demeter.models import (
+    Alert, Parcel, Sensor, SensorData, Tank, TerrainElement, User, Zone,
+)
 
 # ---------------------------------------------------------------------------------------
 # Errores
@@ -695,3 +697,171 @@ def update_user(user_id: int, changes: dict) -> s.User | None:
         except IntegrityError as error:
             raise AlreadyExistsError("Ya existe un usuario con ese google_sub") from error
         return _user(row)
+
+
+# ---------------------------------------------------------------------------------------
+# Terreno y depósitos (entrega 3)
+#
+# Zonas y elementos guardan su forma como texto GeoJSON (SQLite no tiene tipo JSON), igual que el
+# contorno de la parcela: se convierte a texto al guardar y a objeto al leer, solo aquí.
+# ---------------------------------------------------------------------------------------
+
+
+def _zone(row: Zone) -> s.Zone:
+    return s.Zone(
+        id=row.id,
+        parcel_id=row.parcel_id,
+        name=row.name,
+        type=row.type,
+        crop=row.crop,
+        boundary=s.Polygon.model_validate_json(row.boundary),
+        area_m2=row.area_m2,
+    )
+
+
+def _element(row: TerrainElement) -> s.TerrainElement:
+    return s.TerrainElement(
+        id=row.id,
+        parcel_id=row.parcel_id,
+        type=row.type,
+        subtype=row.subtype,
+        geometry=s.Geometry.model_validate_json(row.geometry),
+        height_m=row.height_m,
+    )
+
+
+def _tanks(session: Session, parcel_id: int) -> list[s.Tank]:
+    """Los depósitos de la parcela con su nivel, dentro de una sesión ya abierta."""
+    rows = session.exec(select(Tank).where(Tank.parcel_id == parcel_id).order_by(Tank.id)).all()
+
+    # El nivel de cada depósito es el ÚLTIMO valor de su sensor de nivel. Se piden todos los
+    # sensores de golpe (dos consultas en total, no una por depósito), como en ``last_readings``.
+    sensor_ids = {row.level_sensor_id for row in rows if row.level_sensor_id}
+    level: dict[str, float] = {}
+    if sensor_ids:
+        newest = (
+            select(SensorData.sensor_id, func.max(SensorData.recorded_at).label("recorded_at"))
+            .where(SensorData.sensor_id.in_(sensor_ids))
+            .group_by(SensorData.sensor_id)
+            .subquery()
+        )
+        level = dict(session.exec(
+            select(SensorData.sensor_id, SensorData.value).join(
+                newest,
+                and_(
+                    SensorData.sensor_id == newest.c.sensor_id,
+                    SensorData.recorded_at == newest.c.recorded_at,
+                ),
+            )
+        ).all())
+
+    tanks = []
+    for row in rows:
+        pct = level.get(row.level_sensor_id)  # None si no tiene sensor o aún no hay lecturas
+        tanks.append(s.Tank(
+            id=row.id,
+            parcel_id=row.parcel_id,
+            name=row.name,
+            capacity_l=row.capacity_l,
+            level_sensor_id=row.level_sensor_id,
+            level_pct=pct,
+            # Litros disponibles = capacidad × porcentaje. Se redondea a 1 decimal, como hacía
+            # ``sample_data``, para que el riego de Mario H. reciba lo mismo que hasta ahora.
+            available_l=round(row.capacity_l * pct / 100, 1) if pct is not None else None,
+            latitude=row.latitude,
+            longitude=row.longitude,
+        ))
+    return tanks
+
+
+def tanks(parcel_id: int) -> list[s.Tank]:
+    """Depósitos de la parcela por orden de id, con el nivel sacado de la última lectura de su
+    sensor. Sin sensor o sin lecturas, ``level_pct`` y ``available_l`` van a ``None`` (no se sabe,
+    que no es lo mismo que vacío). Parcela inexistente o sin depósitos: lista vacía.
+
+    El porcentaje se devuelve tal como lo midió el sensor, sin recortarlo a 0-100: decidir qué
+    hacer con una lectura imposible es cosa de quien la usa, no del repositorio."""
+    with conexion.open_session() as session:
+        return _tanks(session, parcel_id)
+
+
+def get_terrain(parcel_id: int) -> s.Terrain | None:
+    """Todo lo que necesita el editor 3D en una llamada: la parcela con su contorno, sus zonas,
+    elementos, sensores (también los desactivados, como ``parcel_sensors``; ocultarlos según el
+    rol es cosa de la API) y depósitos. ``None`` si la parcela no existe."""
+    with conexion.open_session() as session:
+        parcel = session.get(Parcel, parcel_id)
+        if parcel is None:
+            return None
+        zones = session.exec(select(Zone).where(Zone.parcel_id == parcel_id).order_by(Zone.id)).all()
+        elements = session.exec(
+            select(TerrainElement)
+            .where(TerrainElement.parcel_id == parcel_id)
+            .order_by(TerrainElement.id)
+        ).all()
+        sensors = session.exec(
+            select(Sensor).where(Sensor.parcel_id == parcel_id).order_by(Sensor.id)
+        ).all()
+        return s.Terrain(
+            parcel=_parcel_detail(parcel),
+            zones=[_zone(row) for row in zones],
+            elements=[_element(row) for row in elements],
+            sensors=[_sensor(row) for row in sensors],
+            tanks=_tanks(session, parcel_id),
+        )
+
+
+def _require_parcel(session: Session, parcel_id: int) -> None:
+    # Escribir en una parcela que no existe es un error (contrato, regla 5). Se comprueba aquí para
+    # dar un ``NotFoundError`` claro en vez del error genérico de clave foránea de la base de datos.
+    if session.get(Parcel, parcel_id) is None:
+        raise NotFoundError(f"La parcela {parcel_id} no existe")
+
+
+def create_zone(parcel_id: int, body: s.ZoneCreate, area_m2: float | None) -> s.Zone:
+    """Crea una zona en la parcela. La superficie la calcula la API (``geo.polygon_area_m2``) y
+    aquí solo se guarda. Parcela inexistente: ``NotFoundError``."""
+    with conexion.open_session() as session:
+        _require_parcel(session, parcel_id)
+        row = Zone(
+            parcel_id=parcel_id,
+            name=body.name,
+            type=body.type,
+            crop=body.crop,
+            boundary=body.boundary.model_dump_json(),
+            area_m2=area_m2,
+        )
+        session.add(row)
+        session.commit()
+        return _zone(row)
+
+
+def create_element(parcel_id: int, body: s.ElementCreate) -> s.TerrainElement:
+    """Crea un árbol, bancal o camino en la parcela. Parcela inexistente: ``NotFoundError``."""
+    with conexion.open_session() as session:
+        _require_parcel(session, parcel_id)
+        row = TerrainElement(
+            parcel_id=parcel_id,
+            type=body.type,
+            subtype=body.subtype,
+            geometry=body.geometry.model_dump_json(),
+            height_m=body.height_m,
+        )
+        session.add(row)
+        session.commit()
+        return _element(row)
+
+
+def delete_element(element_id: int) -> bool:
+    """Borra un elemento del terreno. ``True`` si lo borró, ``False`` si no existía.
+
+    Es lo ÚNICO que el repositorio borra de verdad (contrato, regla 7): un árbol mal colocado no
+    tiene historial que conservar, a diferencia de una parcela o un sensor.
+    """
+    with conexion.open_session() as session:
+        row = session.get(TerrainElement, element_id)
+        if row is None:
+            return False
+        session.delete(row)
+        session.commit()
+        return True

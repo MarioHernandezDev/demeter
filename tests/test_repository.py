@@ -12,7 +12,7 @@ from sqlmodel import Session, SQLModel, select
 
 from demeter.api import schemas as s
 from demeter.db import conexion, repositorio
-from demeter.models import Alert, Parcel, Sensor, SensorData, User
+from demeter.models import Alert, Parcel, Sensor, SensorData, Tank, TerrainElement, User, Zone
 
 # Contorno de prueba: un cuadradito. Se guarda como TEXTO GeoJSON, igual que hará la API.
 BOUNDARY = s.Polygon(
@@ -1107,3 +1107,172 @@ def test_update_user_rechaza_un_rol_desconocido(db):
 
 def test_update_user_inexistente_devuelve_none(db):
     assert repositorio.update_user(999, {"role": "lector"}) is None
+
+
+# ---------------------------------------------------------------------------------------
+# Terreno: datos de prueba
+# ---------------------------------------------------------------------------------------
+
+ZONE_BODY = s.ZoneCreate(name="Bancal norte", type="crop", crop="aguacate", boundary=BOUNDARY)
+TREE = s.ElementCreate(
+    type="tree", subtype="aguacate", geometry=s.Geometry(type="Point", coordinates=[-3.0, 36.0]),
+    height_m=4.5,
+)
+PATH = s.ElementCreate(
+    type="path",
+    geometry=s.Geometry(type="LineString", coordinates=[[-3.0, 36.0], [-2.95, 36.05]]),
+)
+
+
+def _add_tank(db_engine, parcel_id=1, name="Balsa", capacity=10000.0, sensor_id=None):
+    with Session(db_engine) as session:
+        row = Tank(parcel_id=parcel_id, name=name, capacity_l=capacity, level_sensor_id=sensor_id)
+        session.add(row)
+        session.commit()
+        return row.id
+
+
+@pytest.fixture
+def nivel(db):
+    """Un sensor de nivel de depósito (d001) en la parcela 1."""
+    with Session(db) as session:
+        session.add(Sensor(id="d001", parcel_id=1, type="nivel_deposito", unit="%"))
+        session.commit()
+    return "d001"
+
+
+# ---------------------------------------------------------------------------------------
+# create_zone / create_element / delete_element
+# ---------------------------------------------------------------------------------------
+
+
+def test_create_zone_guarda_y_devuelve_la_zona(db):
+    zone = repositorio.create_zone(1, ZONE_BODY, 321.5)
+    assert isinstance(zone, s.Zone) and zone.id == 1 and zone.parcel_id == 1
+    assert (zone.name, zone.type, zone.crop, zone.area_m2) == ("Bancal norte", "crop", "aguacate", 321.5)
+    assert zone.boundary == BOUNDARY  # vuelve como Polygon, no como texto
+
+
+def test_create_zone_guarda_el_contorno_como_texto_geojson(db):
+    repositorio.create_zone(1, ZONE_BODY, None)
+    with Session(db) as session:
+        stored = session.get(Zone, 1).boundary
+    assert isinstance(stored, str) and s.Polygon.model_validate_json(stored) == BOUNDARY
+
+
+def test_create_zone_parcela_inexistente_lanza_not_found(db):
+    with pytest.raises(repositorio.NotFoundError):
+        repositorio.create_zone(999, ZONE_BODY, 1.0)
+
+
+def test_create_element_punto_y_linea(db):
+    tree = repositorio.create_element(1, TREE)
+    path = repositorio.create_element(1, PATH)
+    assert isinstance(tree, s.TerrainElement)
+    assert (tree.type, tree.subtype, tree.height_m) == ("tree", "aguacate", 4.5)
+    assert tree.geometry == TREE.geometry and path.geometry == PATH.geometry
+    assert path.subtype is None and path.height_m is None
+
+
+def test_create_element_parcela_inexistente_lanza_not_found(db):
+    with pytest.raises(repositorio.NotFoundError):
+        repositorio.create_element(999, TREE)
+
+
+def test_delete_element_borra_y_dice_si_existia(db):
+    tree = repositorio.create_element(1, TREE)
+    other = repositorio.create_element(1, PATH)
+    assert repositorio.delete_element(tree.id) is True
+    assert [e.id for e in repositorio.get_terrain(1).elements] == [other.id]  # el otro sigue
+    assert repositorio.delete_element(tree.id) is False  # ya no existe
+
+
+def test_delete_element_inexistente_devuelve_false(db):
+    assert repositorio.delete_element(999) is False
+
+
+# ---------------------------------------------------------------------------------------
+# tanks
+# ---------------------------------------------------------------------------------------
+
+
+def test_tanks_saca_el_nivel_de_la_ultima_lectura_del_sensor(db, nivel):
+    _add_tank(db, sensor_id=nivel)
+    repositorio.save_reading(nivel, at(0), 90.0)
+    repositorio.save_reading(nivel, at(5), 42.5)  # la más reciente
+    (tank,) = repositorio.tanks(1)
+    assert isinstance(tank, s.Tank)
+    assert (tank.level_pct, tank.available_l, tank.capacity_l) == (42.5, 4250.0, 10000.0)
+
+
+def test_tanks_usa_la_mas_reciente_aunque_se_guardara_antes(db, nivel):
+    _add_tank(db, sensor_id=nivel)
+    repositorio.save_reading(nivel, at(5), 30.0)
+    repositorio.save_reading(nivel, at(1), 80.0)  # llega tarde, pero es más antigua
+    assert repositorio.tanks(1)[0].level_pct == 30.0
+
+
+def test_tanks_redondea_los_litros_a_un_decimal(db, nivel):
+    _add_tank(db, capacity=333.0, sensor_id=nivel)
+    repositorio.save_reading(nivel, at(0), 33.33)
+    assert repositorio.tanks(1)[0].available_l == 111.0  # 110.9889 -> 111.0
+
+
+@pytest.mark.parametrize("with_sensor", [False, True])  # sin sensor / sensor sin lecturas
+def test_tanks_sin_dato_de_nivel_deja_none(db, nivel, with_sensor):
+    _add_tank(db, sensor_id=nivel if with_sensor else None)
+    tank = repositorio.tanks(1)[0]
+    assert tank.level_pct is None and tank.available_l is None  # "no se sabe", no "vacío"
+
+
+def test_tanks_un_nivel_cero_no_es_none(db, nivel):
+    _add_tank(db, sensor_id=nivel)
+    repositorio.save_reading(nivel, at(0), 0.0)
+    tank = repositorio.tanks(1)[0]
+    assert tank.level_pct == 0.0 and tank.available_l == 0.0
+
+
+def test_tanks_varios_por_orden_y_solo_de_esa_parcela(db, nivel):
+    first = _add_tank(db, name="Balsa", sensor_id=nivel)
+    second = _add_tank(db, name="Aljibe")
+    _add_tank(db, parcel_id=2, name="De otra parcela")
+    assert [t.id for t in repositorio.tanks(1)] == [first, second]
+
+
+@pytest.mark.parametrize("parcel_id", [2, 999])  # sin depósitos / inexistente
+def test_tanks_sin_depositos_devuelve_lista_vacia(db, parcel_id):
+    assert repositorio.tanks(parcel_id) == []
+
+
+# ---------------------------------------------------------------------------------------
+# get_terrain
+# ---------------------------------------------------------------------------------------
+
+
+def test_get_terrain_reune_todo_lo_de_la_parcela(db, nivel):
+    zone = repositorio.create_zone(1, ZONE_BODY, 100.0)
+    tree = repositorio.create_element(1, TREE)
+    _add_tank(db, sensor_id=nivel)
+    terrain = repositorio.get_terrain(1)
+    assert isinstance(terrain, s.Terrain)
+    assert isinstance(terrain.parcel, s.ParcelDetail) and terrain.parcel.boundary == BOUNDARY
+    assert [z.id for z in terrain.zones] == [zone.id]
+    assert [e.id for e in terrain.elements] == [tree.id]
+    assert [x.id for x in terrain.sensors] == ["a001", "d001", "h001", "t001"]  # con desactivado
+    assert [t.name for t in terrain.tanks] == ["Balsa"]
+
+
+def test_get_terrain_no_mezcla_parcelas(db):
+    repositorio.create_zone(1, ZONE_BODY, None)
+    repositorio.create_element(1, TREE)
+    terrain = repositorio.get_terrain(2)
+    assert (terrain.zones, terrain.elements, terrain.sensors, terrain.tanks) == ([], [], [], [])
+
+
+def test_get_terrain_de_una_parcela_de_baja(db):
+    # Como get_parcel: pedir una parcela concreta no la oculta; ocultarla es cosa de la API.
+    assert repositorio.get_terrain(3).parcel.is_active is False
+
+
+def test_get_terrain_parcela_inexistente_devuelve_none(db):
+    assert repositorio.get_terrain(999) is None
