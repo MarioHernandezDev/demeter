@@ -1,8 +1,8 @@
 # Contrato del repositorio de datos (B6, #13)
 
-> **Versión:** 0.3 (borrador; incorpora las respuestas de Alex del 23/11/2026)
+> **Versión:** 0.4 (24/11/2026: entrega 1 en `main`; entrega 2 ajustada al motor de alertas)
 > **Código:** `demeter/db/repositorio.py` y `demeter/db/conexion.py` · **Pruebas:** `tests/test_repository.py`
-> **Rama:** `feature/db-repositorio` · **Autor:** David
+> **Autor:** David
 > **Tablas:** [`docs/modelo-datos.md`](modelo-datos.md) v1.1 · **API:** [`docs/api-contrato.md`](api-contrato.md)
 
 Este documento fija **qué funciones ofrece la capa de consultas a la base de datos**, con qué
@@ -24,7 +24,9 @@ repo.readings("t001", limit=50)
 ## 2. Reglas generales
 
 1. **Una sesión por llamada.** Cada función abre y cierra la suya. Lo que devuelve ya está
-   construido y no depende de ninguna sesión abierta.
+   construido y no depende de ninguna sesión abierta. **Única excepción:** `save_reading` acepta
+   la sesión de quien la llama (ver 4.1), para que la ingesta guarde la lectura y evalúe sus
+   alertas en una sola transacción.
 2. **Devuelve los esquemas de la API** (`s.Reading`, `s.Sensor`, `s.Alert`...), así que las rutas
    casi no cambian. **Única excepción: las consultas de usuario para el login**, que devuelven
    el modelo `User` de la base de datos porque necesitan `password_hash`, que `s.User` no lleva.
@@ -60,7 +62,7 @@ No todas las funciones son una sustitución directa:
 
 | Función | Devuelve | Qué hace |
 |---|---|---|
-| `save_reading(sensor_id, timestamp, value)` | `s.IngestResult` | Guarda una lectura. Si ya existe una con el mismo sensor y hora, **no es un error**: devuelve `stored=False, duplicate=True`. Además actualiza `sensors.last_seen_at`, **solo si la lectura es más reciente** que la que había (una lectura atrasada se guarda pero no mueve `last_seen_at`) |
+| `save_reading(sensor_id, timestamp, value, session=None)` | `s.IngestResult` | Guarda una lectura. Si ya existe una con el mismo sensor y hora, **no es un error**: devuelve `stored=False, duplicate=True`. Además actualiza `sensors.last_seen_at`, **solo si la lectura es más reciente** que la que había (una lectura atrasada se guarda pero no mueve `last_seen_at`). Un valor no finito (`NaN`, `inf`) lanza `ValueError`. **Con `session`**, trabaja dentro de esa transacción y **no hace `commit`** (sí actualiza `last_seen_at` dentro de ella): la ingesta guarda, llama a `evaluar_lectura` del motor y confirma una sola vez |
 | `readings(sensor_id, since=None, limit=100)` | `list[s.Reading]` | Las últimas `limit` lecturas posteriores a `since` (exclusivo), **de la más antigua a la más reciente**. Rellena `type` y `unit` con los del sensor |
 | `last_reading(sensor_id)` | `s.Reading \| None` | La lectura más reciente de un sensor |
 | `last_readings(parcel_id)` | `dict[str, s.Reading]` | La última lectura de cada sensor de la parcela, en una sola consulta. Sirve para el dashboard. Los sensores sin datos no aparecen |
@@ -74,17 +76,17 @@ No todas las funciones son una sustitución directa:
 
 ### 4.2 Alertas (entrega 2)
 
-Dependen de que el esquema `Alert` tenga `OFFLINE`, `resolved_at`, `value` y `threshold` (rama
-`feature/api-alert-campos` de Alex, con PR abierto). Hasta que entre en `main`, esta entrega espera.
+Abrir, cerrar y buscar la alerta activa **no está en el repositorio**: lo hace el motor de
+alertas de Mario L. (`demeter/services/alerts.py`), dentro de la transacción de la ingesta. Por
+eso se quitaron `open_alert`, `resolve_alert` y `get_active_alert` (decisión del 24/11/2026). El
+repositorio ofrece lo que necesitan la pantalla de alertas y el estado de conexión de los sensores.
 
 | Función | Devuelve | Qué hace |
 |---|---|---|
-| `list_alerts(parcel_id=None, unread_only=False)` | `list[s.Alert]` | Alertas, **las más recientes primero**. Con `parcel_id` filtra por parcela; con `unread_only=True`, solo las no leídas |
-| `set_acknowledged(alert_id, acknowledged)` | `s.Alert \| None` | Marca una alerta como leída o no leída |
-| `get_active_alert(sensor_id, alert_type)` | `s.Alert \| None` | La alerta **activa** (sin `resolved_at`) de ese sensor y tipo, si hay |
-| `open_alert(sensor_id, alert_type, message, opened_at, value=None, threshold=None)` | `s.Alert` | Abre una alerta. Si ya hay una activa del mismo sensor y tipo, **devuelve esa y no crea otra** (la base de datos lo impone con el índice único parcial). Así el motor puede llamarla sin comprobar antes |
-| `resolve_alert(alert_id, resolved_at)` | `s.Alert \| None` | Cierra una alerta. Si ya estaba resuelta, la devuelve sin cambiarla |
-| `sensors_last_seen()` | `list[tuple[str, datetime \| None]]` | Código y `last_seen_at` de los **sensores activos de parcelas activas**. Es lo que necesita la comprobación OFFLINE cada 60 s. `None` = nunca ha enviado datos (y no cuenta como caído) |
+| `list_alerts(parcel_id=None, unread_only=False, alert_type=None, sensor_id=None, active=None, limit=20, offset=0)` | `tuple[list[s.Alert], int]` | Alertas, **las más recientes primero** (a igual hora, desempata el id), y el **total** que cumple los filtros sin contar la paginación (para `X-Total-Count`). `active=True` solo activas, `False` solo resueltas, `None` todas. Con `limit <= 0` la página va vacía y el total es el real. `offset` negativo: `ValueError` |
+| `set_acknowledged(alert_id, acknowledged)` | `s.Alert \| None` | Marca una alerta como leída o no leída. No la resuelve. `None` si no existe |
+| `acknowledge_all(parcel_id)` | `int` | Marca como leídas todas las alertas sin leer de la parcela y devuelve cuántas ha marcado. Repetirla devuelve 0 |
+| `sensors_last_seen()` | `list[tuple[str, datetime \| None]]` | Solo lectura. Código y `last_seen_at` de los **sensores activos de parcelas activas**, por código. `None` = nunca ha enviado datos ("esperando", no caído). Para el estado conectado / esperando / sin señal |
 
 ### 4.3 Usuarios, terreno y costes (entrega 3)
 
@@ -119,7 +121,17 @@ Hay dos, y se importan de `demeter.db.repositorio`:
 
 | Para | Pregunta |
 |---|---|
-| Mario L. | ¿Bastan las seis funciones de alertas para el motor (D2) y la comprobación OFFLINE? |
+| Alex | Cuando `s.Parcel` tenga `is_active` (su PR de #22), el repositorio lo rellena |
+
+### Cerradas (24/11/2026)
+
+- **Entrega 2 ajustada al motor de alertas** (Alex; pendiente de confirmar por Mario L.): se
+  quitan `open_alert`, `resolve_alert` y `get_active_alert`, que hace el motor. Se queda
+  `sensors_last_seen` como solo lectura. `list_alerts` devuelve `(página, total)` y
+  `acknowledge_all` devuelve cuántas marcó.
+- `save_reading` admite `session` para guardar la lectura y sus alertas en una transacción.
+- `save_reading` rechaza valores no finitos.
+- La entrega 3 se mantiene completa: Alex necesita todas sus funciones.
 
 ### Cerradas (23/11/2026)
 
