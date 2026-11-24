@@ -46,14 +46,24 @@ class AlertType(str, Enum):
 
     LOW = "LOW"
     HIGH = "HIGH"
+    OFFLINE = "OFFLINE"  # el sensor lleva 10 min o más sin enviar lecturas
 
 
 class SensorStatus(str, Enum):
-    """Estado de un sensor según su último valor. Lo calcula ``Sensor.status_for``."""
+    """Semáforo de la tarjeta de un sensor.
+
+    Lo manda la API en ``GET /api/dashboard`` (``alert_rules.card_status``).
+    ``Sensor.status_for`` solo sabe de umbrales, así que nunca devuelve ``OFFLINE``:
+    para eso hace falta la hora de la última lectura, y eso lo decide el servidor.
+
+    - ``OFFLINE``: la última lectura tiene 10 min o más. Gana a los demás (tarjeta gris).
+    - ``SIN_DATOS``: el sensor nunca ha enviado datos («esperando datos», gris claro).
+    """
 
     OK = "ok"
     LOW = "LOW"
     HIGH = "HIGH"
+    OFFLINE = "offline"
     SIN_DATOS = "sin_datos"
 
 
@@ -167,7 +177,15 @@ class Alert:
     timestamp: str  # ISO 8601 UTC
     type: str  # uno de AlertType
     message: str
-    acknowledged: bool = False
+    acknowledged: bool = False  # leída por el usuario
+    resolved_at: str | None = None  # ISO 8601 UTC; nulo = sigue activa
+    value: float | None = None  # lectura que la abrió (nulo en OFFLINE)
+    threshold: float | None = None  # umbral vigente en ese momento (nulo en OFFLINE)
+
+    @property
+    def active(self) -> bool:
+        """La alerta sigue abierta (el sistema aún no la ha cerrado)."""
+        return self.resolved_at is None
 
     @classmethod
     def from_api(cls, data: dict[str, Any]) -> Alert:
@@ -181,6 +199,7 @@ class SensorSnapshot:
     sensor: Sensor
     last: Reading | None = None
     status: str = SensorStatus.SIN_DATOS.value
+    recent: list[float] = dataclasses.field(default_factory=list)  # últimos 20, de antiguo a reciente
 
     @classmethod
     def from_api(cls, data: dict[str, Any]) -> SensorSnapshot:
@@ -189,8 +208,15 @@ class SensorSnapshot:
         return cls(
             sensor=sensor,
             last=last,
+            # Si la API no manda estado, se calcula con los umbrales (nunca da «offline»).
             status=data.get("status") or sensor.status_for(last.value if last else None),
+            recent=[float(v) for v in data.get("recent") or []],
         )
+
+    @property
+    def offline(self) -> bool:
+        """Sin señal: la tarjeta se pinta en gris aunque el último valor esté fuera de rango."""
+        return self.status == SensorStatus.OFFLINE.value
 
 
 @dataclasses.dataclass(frozen=True)

@@ -2,7 +2,7 @@
    La intro es la misma de la portada (proto.css); aquí solo va lo que hay después de la niebla.
    Lenguaje: tinta sobre niebla, cifras en la condensada del nombre, un único color para avisar. */
 
-:root { --warn: #b33a12; --warn-soft: rgba(179,58,18,.1); --hair: rgba(18,24,26,.13); --muted: #56626a; --paper: #eceeed; }
+:root { --warn: #b33a12; --warn-soft: rgba(179,58,18,.1); --hair: rgba(18,24,26,.13); --muted: #56626a; --paper: #eceeed; --off: #8a9499; --off-soft: rgba(18,24,26,.05); }
 
 /* ---------------------------------------------------------------- barra de la app */
 .bar__nav a[aria-current="page"] { background: #fff; color: var(--ink); border-color: #fff; }
@@ -73,6 +73,15 @@ body.app.has-tabs .bar { background: rgba(214,218,218,.72); backdrop-filter: blu
 .srow__st { font-size: 14px; color: var(--muted); } .srow__st b { color: var(--ink); font-weight: 600; }
 .srow--warn .srow__v, .srow--warn .srow__st b { color: var(--warn); }
 .srow--warn .srow__spark polyline { stroke: var(--warn); opacity: 1; }
+/* sin señal (status «offline»): tarjeta gris, gana a «alto»/«bajo». La cifra se queda
+   visible pero apagada: es el último valor conocido, no el actual. Los textos van en
+   --muted (5,4:1); --off (2,7:1) solo en líneas y puntos, nunca en texto. */
+.srow--off .srow__v, .srow--off .srow__st b { color: var(--muted); font-weight: 500; }
+.srow--off .srow__btn { background: var(--off-soft); }
+.srow--off .srow__spark polyline { stroke: var(--off); stroke-dasharray: 3 4; opacity: 1; }
+/* esperando datos (status «sin_datos»): sin cifra, sin alarma */
+.srow--wait .srow__v { color: rgba(18,24,26,.25); }
+.srow--wait .srow__spark polyline { opacity: .15; }
 .chev { width: 20px; height: 20px; fill: none; stroke: var(--muted); stroke-width: 1.6; transition: transform .2s var(--ease); }
 .srow[data-open] .chev { transform: rotate(90deg); }
 .srow__more { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .25s var(--ease); }
@@ -259,7 +268,7 @@ body.app .page { padding-top: 132px; background: linear-gradient(180deg, #a8afb1
 .ro__title em { font: italic 400 1em "Instrument Serif", serif; letter-spacing: -.02em; }
 .ro__chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip { display: inline-flex; align-items: center; gap: 7px; height: 34px; padding: 0 12px; border-radius: 99px; border: 1px solid rgba(18,24,26,.18); background: rgba(255,255,255,.4); color: var(--ink); font: 500 13px "Mona Sans"; cursor: pointer; transition: background-color .15s ease, color .15s ease, transform .16s var(--ease); }
-.chip b { font-weight: 600; } .chip i { width: 7px; height: 7px; border-radius: 50%; background: #7fa69a; } .chip i.is-warn { background: var(--warn); }
+.chip b { font-weight: 600; } .chip i { width: 7px; height: 7px; border-radius: 50%; background: #7fa69a; } .chip i.is-warn { background: var(--warn); } .chip i.is-off { background: var(--off); }
 .chip[aria-pressed="true"] { background: var(--ink); color: #fff; border-color: var(--ink); }
 .chip:active { transform: scale(.97); }
 .ro__read { display: grid; gap: 10px; padding-top: 16px; border-top: 1px solid var(--hair); }
@@ -272,6 +281,7 @@ body.app .page { padding-top: 132px; background: linear-gradient(180deg, #a8afb1
 .ro__band { position: absolute; top: 0; bottom: 0; border-radius: 99px; background: rgba(127,166,154,.65); transition: left .5s var(--ease), width .5s var(--ease); }
 .ro__dot { position: absolute; top: 50%; width: 16px; height: 16px; margin: -8px 0 0 -8px; border-radius: 50%; background: var(--ink); box-shadow: 0 0 0 3px #fff; transition: left .5s var(--ease); }
 .ro.is-warn .ro__dot { background: var(--warn); }
+.ro.is-off .ro__v, .ro.is-off .ro__st { color: var(--muted); } .ro.is-off .ro__dot { background: var(--off); }
 .ro__ends { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); }
 .ro__chart { margin-top: 6px; }
 
