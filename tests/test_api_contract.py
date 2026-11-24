@@ -13,7 +13,7 @@ client = TestClient(api)
 KEY = {"X-API-Key": "demo-ingest-key"}
 
 # Las rutas de parcelas y sensores leen de la base de datos (con el seed): ver ``conftest.py``.
-pytestmark = pytest.mark.usefixtures("api_db")
+pytestmark = pytest.mark.usefixtures("datos_ejemplo")
 
 
 _tokens: dict = {}

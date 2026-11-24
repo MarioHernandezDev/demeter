@@ -2,12 +2,13 @@
 
 Código: `demeter/api/` · Pruebas: `tests/test_api_contract.py` · Rama: `feature/api-contrato`
 
-**Parcelas y sensores ya leen y escriben en la base de datos** (A4, #22; repositorio de David,
-#13). El resto de respuestas siguen siendo datos de ejemplo (finca ficticia en Carchuna, Motril) y
-no guardan nada: se irán sustituyendo por su consulta tarea a tarea. Los esquemas (`schemas.py`)
-no cambian.
+**Todas las rutas leen y escriben en la base de datos** (repositorio de David, #13): usuarios,
+parcelas, sensores, lecturas, alertas, dashboard, terreno, costes, agua, predicción y riego. El
+clima es real (Open-Meteo). Los esquemas (`schemas.py`) no cambian. Lo único que ya no existe es el
+«dato de ejemplo»: sin lecturas, un sensor está en `sin_datos`, un depósito sin nivel (`null`) y la
+predicción da 404; nada se inventa.
 
-Para que las rutas de parcelas y sensores funcionen, la BD tiene que estar preparada:
+Para que la API funcione, la BD tiene que estar preparada:
 
 ```
 reflex db migrate               # crea las tablas
@@ -65,10 +66,12 @@ usuario que solo entra con Google no tiene contraseña: con contraseña siempre 
 | PATCH `/api/alerts/{id}` | tecnico | Marcar vista (`{"acknowledged": true}`); no la resuelve, eso lo decide el motor |
 | POST `/api/alerts/ack-all?parcel_id=` | tecnico | Marca como leídas todas las de la parcela. Devuelve `{"updated": n}` (repetir da 0); 404 si la parcela no existe |
 | GET `/api/parcels/{id}/weather` | lector | Clima **real** de Open-Meteo: `current` y `forecast` de las próximas 24 h. Cuenta con la finca 3 y respeta las parcelas de baja. 503 si no hay internet ni datos guardados |
-| GET `/api/parcels/{id}/water` | lector | Agua disponible (de ejemplo hasta el endpoint de agua; solo fincas 1 y 2) |
-| GET `/api/parcels/{id}/terrain` | lector | Todo para el editor 3D |
-| POST `/api/parcels/{id}/zones` · `/elements` · DELETE `/api/elements/{id}` | tecnico | Editar terreno |
-| GET/POST `/api/parcels/{id}/transactions` · GET `.../balance` | lector · tecnico | Costes e ingresos |
+| GET `/api/parcels/{id}/water` | lector | Depósitos y agua disponible. El nivel es el último valor del sensor de cada depósito (`null` si aún no hay lecturas; no es lo mismo que vacío). `distribution` es una propuesta proporcional a los m² de cultivo; el reparto de verdad es `/irrigation` |
+| GET `/api/parcels/{id}/terrain` | lector | Todo para el editor 3D: parcela con contorno, zonas, elementos, sensores (un lector no ve los de baja) y depósitos |
+| POST `/api/parcels/{id}/zones` · `/elements` · DELETE `/api/elements/{id}` | tecnico | Editar terreno. La zona calcula sus m². En una parcela de baja, 409. Borrar un elemento es definitivo (lo único que se borra de verdad) |
+| GET/POST `/api/parcels/{id}/transactions` · GET `.../balance` | lector · tecnico | Costes e ingresos. El importe va siempre en positivo y el signo lo da `kind`. Lista: los más recientes primero. `balance`: ingresos, gastos, saldo y saldo por categoría. En una parcela de baja, 409 al apuntar |
+| GET `/api/sensors/{id}/prediction` | lector | Predicción a 24 h con las últimas 72 h de lecturas. Sin datos suficientes, 404 |
+| GET `/api/parcels/{id}/irrigation` | lector | Consejo de riego con zonas, humedad del suelo, depósitos y clima reales. Sin previsión del tiempo (sin internet), el consejo es `wait`: no se riega a ciegas. El sensor de humedad debe estar colocado dentro de la zona para contar para ella |
 
 ## Qué es nuevo respecto a `demeter/state/types.py`
 
