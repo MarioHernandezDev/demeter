@@ -4,6 +4,7 @@ import pytest
 from sqlmodel import Session, SQLModel
 
 from demeter.db import conexion, seed
+from demeter.services import weather
 
 
 @pytest.fixture
@@ -22,3 +23,16 @@ def api_db(monkeypatch):
         seed.seed(session)
         session.commit()
     return engine
+
+
+@pytest.fixture(autouse=True)
+def sin_internet(monkeypatch):
+    """Ninguna prueba llama a Open-Meteo de verdad: el clima falla salvo que la prueba lo ponga."""
+
+    def sin_red(latitude, longitude):
+        raise OSError("sin internet (prueba)")
+
+    monkeypatch.setattr(weather, "_fetch_json", sin_red)
+    weather.clear_cache()
+    yield
+    weather.clear_cache()
