@@ -10,6 +10,7 @@ El contrato (qué funciones hay, qué reciben y qué devuelven) está en
 - Una consulta de algo que no existe devuelve ``None`` (o una lista vacía), no un error.
 """
 
+import math
 from datetime import datetime, timezone
 
 from sqlalchemy import and_, func, or_, update
@@ -204,7 +205,13 @@ def save_reading(sensor_id: str, timestamp: datetime, value: float) -> s.IngestR
       sensores reintentan cuando no reciben respuesta, así que repetir es normal.
     - ``sensors.last_seen_at`` solo AVANZA: una lectura atrasada se guarda, pero no lo mueve
       hacia atrás (si no, un reenvío de datos viejos haría parecer caído un sensor que funciona).
+    - Un valor no finito (``NaN``, ``inf``, ``-inf``) lanza ``ValueError`` y no se guarda nada.
     """
+    # Integridad de los datos, no regla de negocio: SQLite convierte NaN en nulo (y la columna no
+    # admite nulos) e ``inf`` se guardaría pero luego rompe el JSON y las gráficas. La API también
+    # lo valida, pero el simulador y el histórico escriben aquí directamente, sin pasar por ella.
+    if not math.isfinite(value):
+        raise ValueError(f"Valor no válido para una lectura: {value!r}")
     when = _as_utc(timestamp)
     with conexion.open_session() as session:
         if session.get(Sensor, sensor_id) is None:

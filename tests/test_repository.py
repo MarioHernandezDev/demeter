@@ -292,6 +292,20 @@ def test_save_reading_acepta_sensores_desactivados(db):
     assert repositorio.save_reading("a001", at(0), 50.0).stored is True
 
 
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+def test_save_reading_rechaza_valores_no_finitos_y_no_guarda_nada(db, value):
+    with pytest.raises(ValueError):
+        repositorio.save_reading("t001", at(0), value)
+    assert _rows(db) == []
+    assert _last_seen(db, "t001") is None  # tampoco mueve last_seen_at
+
+
+def test_save_reading_acepta_cero_y_negativos(db):
+    # Cero y bajo cero son lecturas normales (una helada), no valores inválidos.
+    assert repositorio.save_reading("t001", at(0), 0.0).stored is True
+    assert repositorio.save_reading("t001", at(1), -3.5).stored is True
+
+
 # --- fechas -------------------------------------------------------------------------------
 
 
