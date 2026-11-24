@@ -1,0 +1,21 @@
+{
+  "params": {
+    "escalas": [
+      1.5,
+      2.5
+    ],
+    "k_asim": 0.5,
+    "blur_m": 5.0,
+    "nms_m": 3.5,
+    "percentil": 85,
+    "min_len_m": 6.0,
+    "align_min": 0.75,
+    "sep_min_m": 3.5,
+    "ext_conf_min": 0.0,
+    "ext_len_min_m": 0.0
+  },
+  "f1_ajuste": 0.355,
+  "f1_ajuste_antes": 0.275,
+  "n_ejemplos_ajuste": 4,
+  "fecha": "2026-11-23 13:55"
+}

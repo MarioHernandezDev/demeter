@@ -1,0 +1,2 @@
+# modelos entrenados: binarios grandes, se regeneran con entrenar.py
+*.joblib

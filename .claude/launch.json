@@ -1,0 +1,13 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "demo-gemelo",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "demo/gemelo/server.py"
+      ],
+      "port": 8765
+    }
+  ]
+}
