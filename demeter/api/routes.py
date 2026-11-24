@@ -28,6 +28,7 @@ from demeter.api.security import create_access_token, decode_access_token
 from demeter.db import conexion
 from demeter.db import repositorio as repo
 from demeter.services.alert_rules import card_status
+from demeter.services import weather as weather_service
 from demeter.services.alerts import evaluar_lectura
 
 VERSION = "0.1.0-contrato"
@@ -304,6 +305,12 @@ def ingest_history(
 # ---------------------------------------------------------------- dashboard, alertas, clima, agua
 
 
+def _weather_or_none(parcel: s.Parcel) -> Optional[s.Weather]:
+    if parcel.latitude is None or parcel.longitude is None:
+        return None  # sin coordenadas no se puede pedir el clima
+    return weather_service.get_weather(parcel.id, parcel.latitude, parcel.longitude)
+
+
 def build_dashboard(parcel_id: int, user: s.User) -> s.DashboardSummary:
     """El resumen del dashboard de una parcela, tal y como lo ve ``user`` (lo usan GET y WebSocket)."""
     parcel, _ = _visible_parcel(parcel_id, user)
@@ -334,7 +341,7 @@ def build_dashboard(parcel_id: int, user: s.User) -> s.DashboardSummary:
     return s.DashboardSummary(
         parcel=s.Parcel(**parcel.model_dump(exclude={"boundary"})),
         sensors=snaps, alerts=alerts, unread_alerts=unread,
-        updated_at=now, weather=d.weather(parcel_id), water=d.water(parcel_id),
+        updated_at=now, weather=_weather_or_none(parcel), water=d.water(parcel_id),
     )
 
 
@@ -342,9 +349,9 @@ def build_dashboard(parcel_id: int, user: s.User) -> s.DashboardSummary:
 def dashboard(parcel_id: int = Query(default=1), user: s.User = ANY):
     """Último valor de cada sensor, alertas recientes, clima y agua de la parcela.
 
-    Sensores y alertas salen de la base de datos. ``weather`` y ``water`` siguen siendo de
-    ejemplo hasta que existan los endpoints de clima y agua. Para recibirlo sin preguntar cada
-    pocos segundos, ver el WebSocket ``/api/ws/dashboard``.
+    Sensores y alertas salen de la base de datos. ``water`` sigue siendo de ejemplo hasta que
+    exista el endpoint de agua; ``weather`` es el clima real (o ``null`` si no se pudo obtener).
+    Para recibirlo sin preguntar cada pocos segundos, ver el WebSocket ``/api/ws/dashboard``.
     """
     return build_dashboard(parcel_id, user)
 
@@ -448,9 +455,17 @@ def update_alert(alert_id: int, body: s.AlertUpdate, _: s.User = EDITOR):
 
 
 @router.get("/parcels/{parcel_id}/weather", response_model=s.Weather, tags=["clima"])
-def get_weather(parcel_id: int, _: s.User = ANY):
-    _parcel(parcel_id)
-    return d.weather(parcel_id)
+def get_weather(parcel_id: int, user: s.User = ANY):
+    """Clima real (Open-Meteo): tiempo actual y previsión de las próximas 24 h.
+
+    Se guarda 10 min en memoria. Si no hay internet se devuelven los últimos datos conocidos con
+    ``stale=true`` (hasta 6 h); si no hay ninguno, 503. Nunca se inventa un clima.
+    """
+    parcel, _ = _visible_parcel(parcel_id, user)
+    weather = _weather_or_none(parcel)
+    if weather is None:
+        raise HTTPException(503, "No se pudo obtener el clima ahora mismo. Inténtalo en un minuto.")
+    return weather
 
 
 @router.get("/parcels/{parcel_id}/water", response_model=s.WaterSummary, tags=["agua"])
