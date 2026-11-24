@@ -1,0 +1,34 @@
+# Levanta Demeter con un solo comando (E9, issue #4):
+#
+#   docker compose up --build        (la primera vez tarda unos minutos: compila la interfaz)
+#   docker compose up                (las siguientes, en segundos)
+#
+# Web, API (/api) y documentación (/docs) en http://localhost:3000
+# Usuarios de prueba: admin, tecnico y lector, contraseña demo1234.
+#
+# La base de datos (SQLite) se guarda en el volumen «demeter-data», así sobrevive a reinicios.
+# Para empezar de cero: docker compose down -v
+#
+# Cuando exista el simulador de sensores (B4, carpeta simulator/) se añade aquí como un
+# segundo servicio que envía lecturas a http://app:3000/api con DEMETER_INGEST_KEY.
+
+services:
+  app:
+    build: .
+    image: demeter:local
+    container_name: demeter
+    ports:
+      - "${DEMETER_PORT:-3000}:3000"
+    environment:
+      DEMETER_DATABASE_URL: sqlite:///data/demeter.db
+      DEMETER_INGEST_KEY: ${DEMETER_INGEST_KEY:-demo-ingest-key}
+      # Vacío = se genera uno al arrancar (los tokens caducan al reiniciar). Para fijarlo,
+      # pon DEMETER_JWT_SECRET en un .env junto a este archivo.
+      DEMETER_JWT_SECRET: ${DEMETER_JWT_SECRET:-}
+      DEMETER_SEED: "1"
+    volumes:
+      - demeter-data:/app/data
+    restart: unless-stopped
+
+volumes:
+  demeter-data:
