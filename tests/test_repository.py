@@ -12,7 +12,7 @@ from sqlmodel import Session, SQLModel, select
 
 from demeter.api import schemas as s
 from demeter.db import conexion, repositorio
-from demeter.models import Parcel, Sensor, SensorData, User
+from demeter.models import Alert, Parcel, Sensor, SensorData, User
 
 # Contorno de prueba: un cuadradito. Se guarda como TEXTO GeoJSON, igual que hará la API.
 BOUNDARY = s.Polygon(
@@ -626,3 +626,264 @@ def test_set_parcel_active_es_una_sola_transaccion(db):
 
     assert 1 in [p.id for p in repositorio.list_parcels()]  # la parcela sigue activa
     assert _active_sensors(1) == {"a001": False, "h001": True, "t001": True}  # sin cambios
+
+
+# ---------------------------------------------------------------------------------------
+# save_reading con la sesión de quien llama (ingesta + motor de alertas en una transacción)
+# ---------------------------------------------------------------------------------------
+
+
+def test_save_reading_con_session_no_confirma(db):
+    with Session(db) as session:
+        result = repositorio.save_reading("t001", at(0), 20.0, session=session)
+        assert result.stored is True
+        session.rollback()  # quien llama decide deshacer
+    assert _rows(db) == []  # no quedó nada: la función no hizo commit por su cuenta
+    assert _last_seen(db, "t001") is None
+
+
+def test_save_reading_con_session_se_guarda_al_confirmar_quien_llama(db):
+    with Session(db) as session:
+        repositorio.save_reading("t001", at(0), 20.0, session=session)
+        session.commit()
+    assert len(_rows(db)) == 1
+    assert _last_seen(db, "t001") == at(0)
+
+
+def test_save_reading_con_session_actualiza_last_seen_at_dentro_de_la_sesion(db):
+    # El motor de alertas lee el sensor en la MISMA sesión: debe ver ya el last_seen_at nuevo.
+    with Session(db) as session:
+        # El sensor ya está cargado en la sesión antes de guardar (p. ej. la API lo leyó para
+        # validarlo). Se guarda en una variable a propósito: SQLAlchemy solo recuerda los objetos
+        # que siguen en uso, y sin la variable lo volvería a leer de la base de datos y el test no
+        # comprobaría nada.
+        sensor = session.get(Sensor, "t001")
+        repositorio.save_reading("t001", at(3), 20.0, session=session)
+        assert sensor.last_seen_at == at(3)
+        session.rollback()
+
+
+def test_save_reading_con_session_repetida_no_estropea_la_transaccion(db):
+    with Session(db) as session:
+        repositorio.save_reading("t001", at(0), 20.0, session=session)
+        assert repositorio.save_reading("t001", at(0), 20.0, session=session).duplicate is True
+        repositorio.save_reading("t001", at(1), 21.0, session=session)  # la sesión sigue usable
+        session.commit()
+    assert len(_rows(db)) == 2
+
+
+def test_save_reading_con_session_y_motor_de_alertas_en_una_sola_transaccion(db):
+    """Lo que hará la ingesta: guardar, evaluar y un único commit (contrato de alertas, 8.9)."""
+    from demeter.services.alerts import evaluar_lectura
+
+    with Session(db) as session:
+        repositorio.save_reading("t001", at(0), 2.0, session=session)  # umbral bajo de t001 = 8
+        abiertas = evaluar_lectura(session, "t001", at(0), 2.0)
+        assert [a.type for a in abiertas] == ["LOW"]
+        session.commit()
+    assert len(_rows(db)) == 1
+    page, total = repositorio.list_alerts(sensor_id="t001")
+    assert total == 1 and page[0].type == "LOW" and page[0].value == 2.0
+
+
+def test_save_reading_con_session_y_motor_si_falla_no_se_guarda_ni_la_lectura(db):
+    from demeter.services.alerts import evaluar_lectura
+
+    with Session(db) as session:
+        repositorio.save_reading("t001", at(0), 2.0, session=session)
+        evaluar_lectura(session, "t001", at(0), 2.0)
+        session.rollback()  # p. ej. falló algo después
+    assert _rows(db) == []
+    assert repositorio.list_alerts() == ([], 0)
+
+
+# ---------------------------------------------------------------------------------------
+# Alertas: datos de prueba
+# ---------------------------------------------------------------------------------------
+
+
+def _add_alert(db_engine, sensor_id, kind, minute, resolved=None, ack=False, value=None):
+    with Session(db_engine) as session:
+        row = Alert(
+            sensor_id=sensor_id, type=kind, opened_at=at(minute), message=f"{kind} {sensor_id}",
+            resolved_at=at(resolved) if resolved is not None else None,
+            acknowledged=ack, value=value, threshold=8.0 if value is not None else None,
+        )
+        session.add(row)
+        session.commit()
+        return row.id
+
+
+@pytest.fixture
+def alerts(db):
+    """Cinco alertas: cuatro en la parcela 1 y una en la 3. Devuelve sus ids por nombre."""
+    return {
+        "t001_low_resuelta": _add_alert(db, "t001", "LOW", 1, resolved=5, ack=True, value=2.0),
+        "h001_high_activa": _add_alert(db, "h001", "HIGH", 2, value=70.0),
+        "t001_offline_activa": _add_alert(db, "t001", "OFFLINE", 3),
+        "a001_low_activa": _add_alert(db, "a001", "LOW", 4, value=1.0),
+        "t003_offline_activa": _add_alert(db, "t003", "OFFLINE", 6),
+    }
+
+
+# ---------------------------------------------------------------------------------------
+# list_alerts
+# ---------------------------------------------------------------------------------------
+
+
+def test_list_alerts_devuelve_todas_las_mas_recientes_primero_y_el_total(db, alerts):
+    page, total = repositorio.list_alerts()
+    assert total == 5
+    assert [a.timestamp for a in page] == [at(6), at(4), at(3), at(2), at(1)]
+    assert all(isinstance(a, s.Alert) for a in page)
+
+
+def test_list_alerts_traduce_opened_at_a_timestamp_y_rellena_los_campos(db, alerts):
+    page, _ = repositorio.list_alerts(alert_type="LOW", active=False)
+    (alert,) = page
+    assert alert.id == alerts["t001_low_resuelta"]
+    assert (alert.sensor_id, alert.type, alert.value, alert.threshold) == ("t001", "LOW", 2.0, 8.0)
+    assert alert.timestamp == at(1) and alert.timestamp.utcoffset() == timedelta(0)
+    assert alert.resolved_at == at(5) and alert.acknowledged is True
+
+
+def test_list_alerts_filtra_por_parcela(db, alerts):
+    page, total = repositorio.list_alerts(parcel_id=3)
+    assert total == 1 and [a.sensor_id for a in page] == ["t003"]
+    assert repositorio.list_alerts(parcel_id=1)[1] == 4
+
+
+def test_list_alerts_filtra_no_leidas(db, alerts):
+    page, total = repositorio.list_alerts(unread_only=True)
+    assert total == 4 and alerts["t001_low_resuelta"] not in [a.id for a in page]
+
+
+def test_list_alerts_filtra_por_tipo_y_por_sensor(db, alerts):
+    assert repositorio.list_alerts(alert_type="OFFLINE")[1] == 2
+    assert [a.type for a in repositorio.list_alerts(sensor_id="t001")[0]] == ["OFFLINE", "LOW"]
+
+
+def test_list_alerts_filtra_activas_y_resueltas(db, alerts):
+    activas, n_activas = repositorio.list_alerts(active=True)
+    assert n_activas == 4 and all(a.resolved_at is None for a in activas)
+    resueltas, n_resueltas = repositorio.list_alerts(active=False)
+    assert n_resueltas == 1 and resueltas[0].resolved_at is not None
+
+
+def test_list_alerts_combina_filtros(db, alerts):
+    page, total = repositorio.list_alerts(parcel_id=1, active=True, alert_type="LOW")
+    assert total == 1 and page[0].sensor_id == "a001"
+
+
+def test_list_alerts_pagina_y_el_total_no_depende_de_la_pagina(db, alerts):
+    first, total1 = repositorio.list_alerts(limit=2)
+    second, total2 = repositorio.list_alerts(limit=2, offset=2)
+    third, _ = repositorio.list_alerts(limit=2, offset=4)
+    assert total1 == total2 == 5
+    ids = [a.id for a in first + second + third]
+    assert len(ids) == 5 and len(set(ids)) == 5  # ni repetidas ni saltadas
+
+
+def test_list_alerts_pagina_estable_con_misma_hora(db):
+    # Dos alertas abiertas en el mismo instante: el id desempata y el orden no cambia.
+    first = _add_alert(db, "t001", "LOW", 0, value=1.0)
+    second = _add_alert(db, "h001", "LOW", 0, value=1.0)
+    assert [a.id for a in repositorio.list_alerts()[0]] == [second, first]
+
+
+def test_list_alerts_por_defecto_trae_20(db):
+    for minute in range(25):
+        _add_alert(db, "t001", "LOW", minute, resolved=minute, value=1.0)
+    page, total = repositorio.list_alerts()
+    assert len(page) == 20 and total == 25
+
+
+@pytest.mark.parametrize("limit", [0, -1])
+def test_list_alerts_limit_no_positivo_da_pagina_vacia_pero_total_real(db, alerts, limit):
+    assert repositorio.list_alerts(limit=limit) == ([], 5)
+
+
+def test_list_alerts_offset_negativo_lanza_value_error(db, alerts):
+    with pytest.raises(ValueError):
+        repositorio.list_alerts(offset=-1)
+
+
+def test_list_alerts_sin_alertas(db):
+    assert repositorio.list_alerts() == ([], 0)
+    assert repositorio.list_alerts(parcel_id=999) == ([], 0)
+
+
+# ---------------------------------------------------------------------------------------
+# set_acknowledged
+# ---------------------------------------------------------------------------------------
+
+
+def test_set_acknowledged_marca_y_desmarca(db, alerts):
+    alert_id = alerts["h001_high_activa"]
+    assert repositorio.set_acknowledged(alert_id, True).acknowledged is True
+    assert alert_id not in [a.id for a in repositorio.list_alerts(unread_only=True)[0]]
+    assert repositorio.set_acknowledged(alert_id, False).acknowledged is False
+
+
+def test_set_acknowledged_no_resuelve_la_alerta(db, alerts):
+    # Leída y resuelta son dos cosas distintas: leerla no la cierra.
+    assert repositorio.set_acknowledged(alerts["h001_high_activa"], True).resolved_at is None
+
+
+def test_set_acknowledged_inexistente_devuelve_none(db, alerts):
+    assert repositorio.set_acknowledged(999, True) is None
+
+
+# ---------------------------------------------------------------------------------------
+# acknowledge_all
+# ---------------------------------------------------------------------------------------
+
+
+def test_acknowledge_all_marca_las_de_la_parcela_y_devuelve_cuantas(db, alerts):
+    # Parcela 1: 4 alertas, 1 ya leída -> marca 3.
+    assert repositorio.acknowledge_all(1) == 3
+    assert repositorio.list_alerts(parcel_id=1, unread_only=True) == ([], 0)
+
+
+def test_acknowledge_all_no_toca_otras_parcelas(db, alerts):
+    repositorio.acknowledge_all(1)
+    assert repositorio.list_alerts(parcel_id=3, unread_only=True)[1] == 1
+
+
+def test_acknowledge_all_repetida_devuelve_cero(db, alerts):
+    repositorio.acknowledge_all(1)
+    assert repositorio.acknowledge_all(1) == 0
+
+
+def test_acknowledge_all_no_resuelve_las_alertas(db, alerts):
+    repositorio.acknowledge_all(1)
+    assert repositorio.list_alerts(parcel_id=1, active=True)[1] == 3
+
+
+@pytest.mark.parametrize("parcel_id", [2, 999])  # sin alertas / inexistente
+def test_acknowledge_all_sin_alertas_devuelve_cero(db, alerts, parcel_id):
+    assert repositorio.acknowledge_all(parcel_id) == 0
+
+
+# ---------------------------------------------------------------------------------------
+# sensors_last_seen
+# ---------------------------------------------------------------------------------------
+
+
+def test_sensors_last_seen_solo_activos_de_parcelas_activas(db):
+    # a001 está desactivado y t003 está en una parcela de baja: no salen.
+    assert repositorio.sensors_last_seen() == [("h001", None), ("t001", None)]
+
+
+def test_sensors_last_seen_devuelve_la_hora_con_zona(db):
+    repositorio.save_reading("t001", at(7), 20.0)
+    result = dict(repositorio.sensors_last_seen())
+    assert result["t001"] == at(7) and result["t001"].utcoffset() == timedelta(0)
+    assert result["h001"] is None  # nunca ha enviado datos: "esperando", no caído
+
+
+def test_sensors_last_seen_sigue_a_las_bajas_y_reactivaciones(db):
+    repositorio.set_parcel_active(1, False)
+    assert repositorio.sensors_last_seen() == []
+    repositorio.set_parcel_active(3, True)
+    assert [code for code, _ in repositorio.sensors_last_seen()] == ["t003"]
