@@ -29,7 +29,7 @@ SensorType = Literal[
     "temperatura", "humedad_suelo", "luminosidad", "humedad_ambiente", "nivel_deposito"
 ]
 AlertType = Literal["LOW", "HIGH", "OFFLINE"]
-SensorStatus = Literal["ok", "LOW", "HIGH", "sin_datos"]
+SensorStatus = Literal["ok", "LOW", "HIGH", "offline", "sin_datos"]
 ZoneType = Literal["crop", "no_crop"]
 ElementType = Literal["tree", "terrace", "path"]
 TransactionKind = Literal["income", "expense"]
@@ -244,6 +244,12 @@ class Alert(BaseModel):
     threshold: Optional[float] = None  # umbral vigente en ese momento (nulo en OFFLINE)
 
 
+class AckAllResult(BaseModel):
+    """Respuesta de ``POST /api/alerts/ack-all``: cuántas alertas se marcaron como leídas."""
+
+    updated: int
+
+
 class AlertUpdate(BaseModel):
     """Cuerpo de ``PATCH /api/alerts/{id}``: marcar una alerta como vista (o no)."""
 
@@ -256,6 +262,7 @@ class SensorSnapshot(BaseModel):
     sensor: Sensor
     last: Optional[Reading] = None
     status: SensorStatus = "sin_datos"
+    recent: list[float] = Field(default_factory=list)  # últimos 20 valores, de antiguo a reciente
 
 
 class WeatherNow(BaseModel):

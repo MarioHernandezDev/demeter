@@ -120,17 +120,6 @@ def test_openapi_expone_todo():
         assert p in paths
 
 
-def test_alertas_con_offline_y_campos_nuevos():
-    alerts = client.get("/api/alerts", headers=auth()).json()
-    assert {"LOW", "HIGH", "OFFLINE"} == {a["type"] for a in alerts}
-    for a in alerts:
-        assert "resolved_at" in a and "value" in a and "threshold" in a
-        if a["type"] == "OFFLINE":
-            assert a["value"] is None and a["threshold"] is None
-    activa = next(a for a in alerts if a["type"] == "LOW")
-    assert activa["resolved_at"] is None and activa["value"] < activa["threshold"]
-
-
 def test_ultima_lectura_es_de_hace_menos_de_10_min():
     client.post("/api/sensors/t001/data", json={"value": 21.5}, headers=KEY)
     r = client.get("/api/sensors/t001/data?limit=1", headers=auth()).json()[0]

@@ -55,8 +55,10 @@ usuarios (seed, #14) los usuarios son los de ejemplo, en `demeter/api/auth.py` (
 | GET `/api/sensors/{id}/data?limit&since` | lector | Lecturas de la BD, de antigua a reciente (un lector no ve las de un sensor de baja) |
 | POST `/api/sensors/{id}/data` | `X-API-Key` | Ingesta en vivo. `timestamp` opcional (si falta, hora de llegada; si viene, entre 24 h atrás y 5 min por delante, o 422). Repetida: `stored=false, duplicate=true`. Guarda la lectura y evalúa las alertas en una sola transacción; una lectura atrasada o de un sensor de baja se guarda pero no alerta |
 | POST `/api/sensors/{id}/data/batch` | `X-API-Key` | Carga de histórico: `{"readings": [{timestamp, value}, …]}`, 1 a 1000 por llamada, todo o nada, horas de 2000 en adelante. **No genera alertas**. Devuelve `received`, `stored`, `duplicates` |
-| GET `/api/dashboard?parcel_id=` | lector | Último valor por sensor + alertas + clima + agua |
-| GET `/api/alerts` · PATCH `/api/alerts/{id}` | lector · tecnico | Alertas / marcar vista |
+| GET `/api/dashboard?parcel_id=` | lector | Desde la BD: por sensor, último valor, `status` (`ok`/`LOW`/`HIGH`/`offline`/`sin_datos`) y `recent` (últimos 20 valores); las 5 alertas más recientes (activas primero); `unread_alerts` = todas las sin leer de la parcela. `weather` y `water` siguen siendo de ejemplo hasta los endpoints de clima y agua |
+| GET `/api/alerts` | lector | Alertas, las más recientes primero. Filtros: `parcel_id`, `unread_only`, `type` (`LOW`/`HIGH`/`OFFLINE`, otro valor da 422), `sensor_id`, `active` (true activas, false resueltas), `limit` (1–200, por defecto 20) y `offset`. Cabecera `X-Total-Count` con el total sin paginar |
+| PATCH `/api/alerts/{id}` | tecnico | Marcar vista (`{"acknowledged": true}`); no la resuelve, eso lo decide el motor |
+| POST `/api/alerts/ack-all?parcel_id=` | tecnico | Marca como leídas todas las de la parcela. Devuelve `{"updated": n}` (repetir da 0); 404 si la parcela no existe |
 | GET `/api/parcels/{id}/weather` · `/water` | lector | Clima y agua disponible |
 | GET `/api/parcels/{id}/terrain` | lector | Todo para el editor 3D |
 | POST `/api/parcels/{id}/zones` · `/elements` · DELETE `/api/elements/{id}` | tecnico | Editar terreno |
