@@ -1,0 +1,25 @@
+# Lo que no hace falta dentro de la imagen (la hace más pequeña y rápida de construir).
+.git
+.github
+.claude
+.venv
+venv
+__pycache__
+*.py[cod]
+.pytest_cache
+.coverage
+htmlcov
+.web
+.states
+reflex.lock
+*.db
+*.db-journal
+.env
+.env.*
+!.env.example
+data/*
+!data/.gitkeep
+demo
+docs/wireframes
+.vscode
+.idea
