@@ -113,6 +113,17 @@ class Parcel(BaseModel):
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     area_m2: Optional[float] = None
+    is_active: bool = True  # False = dada de baja (solo la ve un admin)
+
+
+class ParcelUpdate(BaseModel):
+    """Cuerpo de ``PATCH /api/parcels/{id}`` (solo admin). Dar de baja no borra nada.
+
+    Al desactivar una parcela se desactivan también todos sus sensores, y al reactivarla se
+    reactivan todos (decisión cerrada con David).
+    """
+
+    is_active: bool
 
 
 class ParcelDetail(Parcel):
@@ -143,12 +154,14 @@ class SensorUpdate(BaseModel):
     """Cuerpo de ``PATCH /api/sensors/{id}``. Solo se cambian los campos enviados.
 
     Cambiar umbrales: solo admin. Colocar el sensor en el mapa (latitud/longitud): admin o tecnico.
+    Un campo ausente no se toca; un campo con ``null`` lo deja vacío (así se quita un umbral).
+    ``is_active`` no admite ``null``.
     """
 
-    threshold_low: Optional[float] = None
-    threshold_high: Optional[float] = None
-    latitude: Optional[float] = None
-    longitude: Optional[float] = None
+    threshold_low: Optional[float] = Field(default=None, allow_inf_nan=False)
+    threshold_high: Optional[float] = Field(default=None, allow_inf_nan=False)
+    latitude: Optional[float] = Field(default=None, ge=-90, le=90)
+    longitude: Optional[float] = Field(default=None, ge=-180, le=180)
     is_active: Optional[bool] = None
 
 

@@ -2,9 +2,19 @@
 
 Código: `demeter/api/` · Pruebas: `tests/test_api_contract.py` · Rama: `feature/api-contrato`
 
-Ahora mismo **todas las respuestas son datos de ejemplo** (finca ficticia en Carchuna, Motril):
-nada se guarda. Sirve para que Interfaz y Simulador avancen. Cuando exista la BD (B1/B6) se
-sustituye cada llamada a `sample_data.py` por su consulta; los esquemas (`schemas.py`) no cambian.
+**Parcelas y sensores ya leen y escriben en la base de datos** (A4, #22; repositorio de David,
+#13). El resto de respuestas siguen siendo datos de ejemplo (finca ficticia en Carchuna, Motril) y
+no guardan nada: se irán sustituyendo por su consulta tarea a tarea. Los esquemas (`schemas.py`)
+no cambian.
+
+Para que las rutas de parcelas y sensores funcionen, la BD tiene que estar preparada:
+
+```
+reflex db migrate               # crea las tablas
+python -m demeter.db.seed       # 3 fincas, 14 sensores y 3 usuarios (se puede repetir)
+```
+
+Si no lo está, esas rutas responden `503` diciendo qué ejecutar.
 
 ## Probarlo
 
@@ -25,7 +35,10 @@ usuarios (seed, #14) los usuarios son los de ejemplo, en `demeter/api/auth.py` (
 
 - Fechas ISO 8601 en UTC con `Z`. Un sensor envía una lectura por minuto (OFFLINE salta a los 10 min). Coordenadas lat/lon; en GeoJSON `[lon, lat]`.
 - m², litros, euros. Ids de sensor en texto (`"t001"`); el resto, enteros.
-- Errores: 401 sin token/credenciales, 403 sin permiso, 404 no existe, 422 datos inválidos.
+- Errores: 401 sin token/credenciales, 403 sin permiso, 404 no existe, 409 conflicto con el estado
+  (p. ej. editar una parcela dada de baja), 422 datos inválidos, 503 BD sin preparar.
+- Dar de baja es **desactivar, no borrar**. Una parcela de baja solo la ve un admin (al resto le da
+  404) y al desactivarla se desactivan todos sus sensores; al reactivarla se reactivan todos.
 
 ## Endpoints
 
@@ -34,10 +47,11 @@ usuarios (seed, #14) los usuarios son los de ejemplo, en `demeter/api/auth.py` (
 | GET `/api/health` | — | Estado |
 | POST `/api/auth/login` · GET `/api/auth/me` | — · cualquiera | Sesión |
 | GET/POST `/api/users` · PATCH `/api/users/{id}` | admin | Gestión de usuarios |
-| GET `/api/parcels` · `/api/parcels/{id}` | lector | Parcelas |
+| GET `/api/parcels` · `/api/parcels/{id}` | lector | Parcelas (`?include_inactive=true` solo admin) |
+| PATCH `/api/parcels/{id}` | admin | Dar de baja o reactivar (`{"is_active": false}`), con todos sus sensores |
 | PUT `/api/parcels/{id}/boundary` | tecnico | Contorno dibujado (calcula m²) |
-| GET `/api/parcels/{id}/sensors` | lector | Sensores |
-| PATCH `/api/sensors/{id}` | tecnico (umbrales: admin) | Umbrales / colocar en el mapa |
+| GET `/api/parcels/{id}/sensors` | lector | Sensores (los de baja solo los ve admin o tecnico) |
+| PATCH `/api/sensors/{id}` | tecnico (umbrales: admin) | Umbrales / colocar en el mapa / activar. Solo cambia lo enviado; `null` vacía el campo; el mínimo debe ser menor que el máximo |
 | GET `/api/sensors/{id}/data?limit&since` | lector | Lecturas |
 | POST `/api/sensors/{id}/data` | `X-API-Key` | Ingesta del simulador (duplicados se ignoran) |
 | GET `/api/dashboard?parcel_id=` | lector | Último valor por sensor + alertas + clima + agua |

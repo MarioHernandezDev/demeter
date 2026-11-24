@@ -13,7 +13,9 @@ import contextlib
 import os
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+from sqlalchemy.exc import OperationalError
 
 from demeter.api.routes import VERSION, router
 from demeter.services.alerts import vigilar_offline
@@ -44,3 +46,15 @@ api = FastAPI(
     ),
 )
 api.include_router(router)
+
+
+@api.exception_handler(OperationalError)
+def database_not_ready(_: Request, __: OperationalError):
+    """Sin tablas (o sin fichero) las rutas que usan la BD fallarían con un 500 sin explicación."""
+    return JSONResponse(
+        status_code=503,
+        content={
+            "detail": "La base de datos no está preparada. Ejecuta `reflex db migrate` y "
+            "`python -m demeter.db.seed`."
+        },
+    )
