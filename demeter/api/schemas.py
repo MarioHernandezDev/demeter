@@ -16,7 +16,7 @@ Reglas generales:
 from datetime import date, datetime
 from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 # --------------------------------------------------------------------------------------
 # Listas cerradas
@@ -176,10 +176,40 @@ class Reading(BaseModel):
 
 
 class ReadingIn(BaseModel):
-    """Cuerpo de ``POST /api/sensors/{sensor_id}/data`` (ingesta, cabecera ``X-API-Key``)."""
+    """Cuerpo de ``POST /api/sensors/{sensor_id}/data`` (ingesta, cabecera ``X-API-Key``).
+
+    ``timestamp`` es opcional: una placa sin reloj no lo envía y el servidor pone la hora de
+    llegada. Una fecha sin zona horaria se toma como UTC.
+    """
+
+    model_config = ConfigDict(allow_inf_nan=False)
+
+    timestamp: Optional[datetime] = None
+    value: float
+
+
+class ReadingPoint(BaseModel):
+    """Una lectura del histórico: aquí la hora es obligatoria."""
+
+    model_config = ConfigDict(allow_inf_nan=False)
 
     timestamp: datetime
     value: float
+
+
+class ReadingBatchIn(BaseModel):
+    """Cuerpo de ``POST /api/sensors/{sensor_id}/data/batch`` (carga de histórico)."""
+
+    readings: list[ReadingPoint] = Field(min_length=1, max_length=1000)
+
+
+class BatchResult(BaseModel):
+    """Respuesta de la carga de histórico: ``received = stored + duplicates``."""
+
+    sensor_id: str
+    received: int
+    stored: int
+    duplicates: int
 
 
 class IngestResult(BaseModel):

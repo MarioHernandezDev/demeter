@@ -52,8 +52,9 @@ usuarios (seed, #14) los usuarios son los de ejemplo, en `demeter/api/auth.py` (
 | PUT `/api/parcels/{id}/boundary` | tecnico | Contorno dibujado (calcula m²) |
 | GET `/api/parcels/{id}/sensors` | lector | Sensores (los de baja solo los ve admin o tecnico) |
 | PATCH `/api/sensors/{id}` | tecnico (umbrales: admin) | Umbrales / colocar en el mapa / activar. Solo cambia lo enviado; `null` vacía el campo; el mínimo debe ser menor que el máximo |
-| GET `/api/sensors/{id}/data?limit&since` | lector | Lecturas |
-| POST `/api/sensors/{id}/data` | `X-API-Key` | Ingesta del simulador (duplicados se ignoran) |
+| GET `/api/sensors/{id}/data?limit&since` | lector | Lecturas de la BD, de antigua a reciente (un lector no ve las de un sensor de baja) |
+| POST `/api/sensors/{id}/data` | `X-API-Key` | Ingesta en vivo. `timestamp` opcional (si falta, hora de llegada; si viene, entre 24 h atrás y 5 min por delante, o 422). Repetida: `stored=false, duplicate=true`. Guarda la lectura y evalúa las alertas en una sola transacción; una lectura atrasada o de un sensor de baja se guarda pero no alerta |
+| POST `/api/sensors/{id}/data/batch` | `X-API-Key` | Carga de histórico: `{"readings": [{timestamp, value}, …]}`, 1 a 1000 por llamada, todo o nada, horas de 2000 en adelante. **No genera alertas**. Devuelve `received`, `stored`, `duplicates` |
 | GET `/api/dashboard?parcel_id=` | lector | Último valor por sensor + alertas + clima + agua |
 | GET `/api/alerts` · PATCH `/api/alerts/{id}` | lector · tecnico | Alertas / marcar vista |
 | GET `/api/parcels/{id}/weather` · `/water` | lector | Clima y agua disponible |

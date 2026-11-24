@@ -1,5 +1,7 @@
 """Pruebas del contrato de la API (issue #20): forma de las respuestas, permisos y validación."""
 
+from datetime import datetime, timedelta, timezone
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -8,6 +10,7 @@ from demeter.api.geo import polygon_area_m2, rectangle
 from demeter.state.types import DashboardSummary as UiDashboard  # contrato de la interfaz
 
 client = TestClient(api)
+KEY = {"X-API-Key": "demo-ingest-key"}
 
 # Las rutas de parcelas y sensores leen de la base de datos (con el seed): ver ``conftest.py``.
 pytestmark = pytest.mark.usefixtures("api_db")
@@ -61,15 +64,20 @@ def test_lector_no_escribe():
 
 
 def test_lecturas_y_limit():
+    # El seed no trae lecturas: se guardan 8 por la API de ingesta.
+    ahora = datetime.now(timezone.utc)
+    for i in range(8):
+        body = {"timestamp": (ahora - timedelta(minutes=i)).isoformat(), "value": 20 + i}
+        assert client.post("/api/sensors/t001/data", json=body, headers=KEY).status_code == 200
     r = client.get("/api/sensors/t001/data?limit=5", headers=auth())
     assert len(r.json()) == 5 and r.json()[0]["sensor_id"] == "t001"
     assert client.get("/api/sensors/zzz/data", headers=auth()).status_code == 404
 
 
 def test_ingesta_necesita_api_key():
-    body = {"timestamp": "2026-11-16T10:00:00Z", "value": 21.5}
+    body = {"timestamp": datetime.now(timezone.utc).isoformat(), "value": 21.5}
     assert client.post("/api/sensors/t001/data", json=body).status_code == 401
-    r = client.post("/api/sensors/t001/data", json=body, headers={"X-API-Key": "demo-ingest-key"})
+    r = client.post("/api/sensors/t001/data", json=body, headers=KEY)
     assert r.status_code == 200 and r.json()["stored"] is True
 
 
@@ -124,8 +132,7 @@ def test_alertas_con_offline_y_campos_nuevos():
 
 
 def test_ultima_lectura_es_de_hace_menos_de_10_min():
-    from datetime import datetime, timedelta, timezone
-
+    client.post("/api/sensors/t001/data", json={"value": 21.5}, headers=KEY)
     r = client.get("/api/sensors/t001/data?limit=1", headers=auth()).json()[0]
     t = datetime.fromisoformat(r["timestamp"].replace("Z", "+00:00"))
     assert datetime.now(timezone.utc) - t < timedelta(minutes=10)
