@@ -1,6 +1,6 @@
 # Contrato del repositorio de datos (B6, #13)
 
-> **Versión:** 0.4 (24/11/2026: entrega 1 en `main`; entrega 2 ajustada al motor de alertas)
+> **Versión:** 1.0 (24/11/2026: las tres entregas implementadas; cierra la #13)
 > **Código:** `demeter/db/repositorio.py` y `demeter/db/conexion.py` · **Pruebas:** `tests/test_repository.py`
 > **Autor:** David
 > **Tablas:** [`docs/modelo-datos.md`](modelo-datos.md) v1.1 · **API:** [`docs/api-contrato.md`](api-contrato.md)
@@ -97,16 +97,16 @@ repositorio ofrece lo que necesitan la pantalla de alertas y el estado de conexi
 | `get_user_by_google_sub(google_sub)` | `models.User \| None` | Para el login con Google. **Es la única forma de enlazar una cuenta de Google**: nunca se enlaza por correo |
 | `get_user(user_id)` | `models.User \| None` | Por id. La API lo usa en cada petición para leer rol y estado |
 | `list_users()` | `list[s.User]` | Todos los usuarios, sin contraseña |
-| `create_user(username, email, role, password_hash=None, google_sub=None, email_verified=False)` | `s.User` | Crea un usuario. Exige `password_hash` **o** `google_sub` (si no, `ValueError`; la base de datos también lo rechaza). Guarda el `email` en minúsculas. Rechaza un `username` con `@` (`ValueError`). Si `username`, `email` o `google_sub` ya existen, lanza `AlreadyExistsError` |
-| `update_user(user_id, changes)` | `s.User \| None` | Cambia `role`, `is_active`, `email_verified`, `password_hash` o `google_sub`, igual que `update_sensor`. `is_active` (cuenta habilitada) y `email_verified` (correo confirmado) son cosas distintas |
-| `get_terrain(parcel_id)` | `s.Terrain \| None` | Todo lo del editor 3D: parcela, zonas, elementos, sensores y depósitos |
-| `create_zone(parcel_id, body, area_m2)` | `s.Zone` | Crea una zona. La API calcula `area_m2` |
-| `create_element(parcel_id, body)` | `s.TerrainElement` | Crea un árbol, bancal o camino |
+| `create_user(username, email, role, password_hash=None, google_sub=None, email_verified=False)` | `s.User` | Crea un usuario. Exige `password_hash` **o** `google_sub` (si no, `ValueError`; la base de datos también lo rechaza). Guarda el `email` sin espacios y en minúsculas. Rechaza un `username` vacío o con `@` y un `role` que no sea `admin`, `tecnico` o `lector` (`ValueError`). Si `username`, `email` o `google_sub` ya existen, lanza `AlreadyExistsError`. Recibe el `password_hash` ya calculado: nunca la contraseña en claro |
+| `update_user(user_id, changes)` | `s.User \| None` | Cambia `role`, `is_active`, `email_verified`, `password_hash` o `google_sub`, igual que `update_sensor`. `is_active` (cuenta habilitada) y `email_verified` (correo confirmado) son cosas distintas. `None` en `role`, `is_active` o `email_verified`: `ValueError`. No deja al usuario sin `password_hash` **y** sin `google_sub` (`ValueError`). `google_sub` de otro usuario: `AlreadyExistsError` |
+| `get_terrain(parcel_id)` | `s.Terrain \| None` | Todo lo del editor 3D: parcela, zonas, elementos, sensores (también los desactivados) y depósitos. Devuelve también las parcelas de baja, como `get_parcel` |
+| `create_zone(parcel_id, body, area_m2)` | `s.Zone` | Crea una zona. La API calcula `area_m2`. Parcela inexistente: `NotFoundError` |
+| `create_element(parcel_id, body)` | `s.TerrainElement` | Crea un árbol, bancal o camino. Parcela inexistente: `NotFoundError` |
 | `delete_element(element_id)` | `bool` | Borra un elemento. `False` si no existía |
-| `tanks(parcel_id)` | `list[s.Tank]` | Depósitos con el nivel sacado de la última lectura de su sensor. Sin sensor o sin lecturas, `level_pct` y `available_l` quedan en `None` |
-| `transactions(parcel_id)` | `list[s.Transaction]` | Movimientos, los más recientes primero |
-| `create_transaction(parcel_id, body)` | `s.Transaction` | Crea un movimiento |
-| `balance(parcel_id)` | `s.Balance` | Ingresos, gastos y saldo, redondeados a 2 decimales |
+| `tanks(parcel_id)` | `list[s.Tank]` | Depósitos, por id, con el nivel sacado de la última lectura de su sensor. Sin sensor o sin lecturas, `level_pct` y `available_l` quedan en `None` (no se sabe, que no es vacío). `available_l` se redondea a 1 decimal. El porcentaje no se recorta a 0-100 |
+| `transactions(parcel_id)` | `list[s.Transaction]` | Movimientos, los más recientes primero (por fecha; a igual fecha, el último apuntado) |
+| `create_transaction(parcel_id, body)` | `s.Transaction` | Crea un movimiento. Parcela inexistente: `NotFoundError` |
+| `balance(parcel_id)` | `s.Balance` | Ingresos, gastos y saldo, redondeados a 2 decimales al final. `by_category` con ingresos en positivo y gastos en negativo, compensados dentro de cada categoría. Sin movimientos (o parcela inexistente): todo a 0 |
 
 ## 5. Errores
 
@@ -121,10 +121,12 @@ Hay dos, y se importan de `demeter.db.repositorio`:
 
 | Para | Pregunta |
 |---|---|
-| Alex | Cuando `s.Parcel` tenga `is_active` (su PR de #22), el repositorio lo rellena |
+| Alex | Cuando `s.User` tenga `email` y `email_verified`, saldrán solos: el repositorio ya los pasa |
 
 ### Cerradas (24/11/2026)
 
+- **Entrega 3 implementada.** El repositorio rellena `is_active` en las parcelas: la API puede
+  quitar el cálculo que hacía con consultas aparte.
 - **Entrega 2 ajustada al motor de alertas** (Alex; pendiente de confirmar por Mario L.): se
   quitan `open_alert`, `resolve_alert` y `get_active_alert`, que hace el motor. Se queda
   `sensors_last_seen` como solo lectura. `list_alerts` devuelve `(página, total)` y
