@@ -4,7 +4,7 @@ Cada prueba empieza con una base de datos NUEVA y con los mismos datos mínimos 
 que ninguna depende del resultado de otra ni del fichero ``data/demeter.db``.
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 import pytest
 from sqlalchemy import event, text
@@ -12,7 +12,7 @@ from sqlmodel import Session, SQLModel, select
 
 from demeter.api import schemas as s
 from demeter.db import conexion, repositorio
-from demeter.models import Alert, Parcel, Sensor, SensorData, User
+from demeter.models import Alert, Parcel, Sensor, SensorData, Tank, User, Zone
 
 # Contorno de prueba: un cuadradito. Se guarda como TEXTO GeoJSON, igual que hará la API.
 BOUNDARY = s.Polygon(
@@ -887,3 +887,484 @@ def test_sensors_last_seen_sigue_a_las_bajas_y_reactivaciones(db):
     assert repositorio.sensors_last_seen() == []
     repositorio.set_parcel_active(3, True)
     assert [code for code, _ in repositorio.sensors_last_seen()] == ["t003"]
+
+
+# ---------------------------------------------------------------------------------------
+# is_active en las parcelas
+# ---------------------------------------------------------------------------------------
+
+
+def test_las_parcelas_dicen_si_estan_activas(db):
+    estados = {p.id: p.is_active for p in repositorio.list_parcels(include_inactive=True)}
+    assert estados == {1: True, 2: True, 3: False}
+    assert repositorio.get_parcel(3).is_active is False
+
+
+def test_set_parcel_active_devuelve_el_estado_nuevo(db):
+    assert repositorio.set_parcel_active(1, False).is_active is False
+    assert repositorio.set_parcel_active(1, True).is_active is True
+
+
+# ---------------------------------------------------------------------------------------
+# Usuarios: búsquedas
+# ---------------------------------------------------------------------------------------
+# El fixture ``db`` ya trae el usuario 1: admin / a@x.es / password_hash="x".
+
+
+def _new_user(**overrides):
+    data = dict(username="ana", email="ana@x.es", role="tecnico", password_hash="hash-ana")
+    data.update(overrides)
+    return repositorio.create_user(**data)
+
+
+def test_get_user_devuelve_el_modelo_con_password_hash(db):
+    user = repositorio.get_user(1)
+    assert isinstance(user, User)  # el modelo de la base de datos, no el esquema
+    assert (user.username, user.password_hash, user.role) == ("admin", "x", "admin")
+
+
+def test_get_user_se_puede_leer_con_la_sesion_cerrada(db):
+    user = repositorio.get_user_by_username("admin")
+    # Si siguiera ligado a una sesión cerrada, leer estos campos fallaría.
+    assert user.email == "a@x.es" and user.is_active is True and user.created_at is not None
+
+
+@pytest.mark.parametrize(
+    "call",
+    [
+        lambda: repositorio.get_user(999),
+        lambda: repositorio.get_user_by_username("nadie"),
+        lambda: repositorio.get_user_by_email("nadie@x.es"),
+        lambda: repositorio.get_user_by_google_sub("g-nadie"),
+    ],
+)
+def test_busquedas_de_usuario_inexistente_devuelven_none(db, call):
+    assert call() is None
+
+
+def test_get_user_by_email_no_distingue_mayusculas_ni_espacios(db):
+    assert repositorio.get_user_by_email("  A@X.ES ").id == 1
+
+
+def test_get_user_by_google_sub(db):
+    created = _new_user(username="gina", email="gina@x.es", password_hash=None, google_sub="g-123")
+    user = repositorio.get_user_by_google_sub("g-123")
+    assert user.id == created.id and user.password_hash is None
+
+
+def test_list_users_por_orden_y_sin_contrasena(db):
+    _new_user()
+    users = repositorio.list_users()
+    assert [u.username for u in users] == ["admin", "ana"]
+    assert all(isinstance(u, s.User) for u in users)
+    assert not hasattr(users[0], "password_hash")
+
+
+def test_list_users_incluye_los_desactivados(db):
+    created = _new_user()
+    repositorio.update_user(created.id, {"is_active": False})
+    assert [u.is_active for u in repositorio.list_users()] == [True, False]
+
+
+# ---------------------------------------------------------------------------------------
+# create_user
+# ---------------------------------------------------------------------------------------
+
+
+def test_create_user_con_contrasena(db):
+    created = _new_user()
+    assert isinstance(created, s.User) and created.id == 2
+    assert (created.username, created.role, created.is_active) == ("ana", "tecnico", True)
+    stored = repositorio.get_user(created.id)
+    assert stored.password_hash == "hash-ana" and stored.email_verified is False
+
+
+def test_create_user_solo_con_google(db):
+    created = _new_user(password_hash=None, google_sub="g-1", email_verified=True)
+    stored = repositorio.get_user(created.id)
+    assert stored.password_hash is None and stored.google_sub == "g-1"
+    assert stored.email_verified is True
+
+
+def test_create_user_guarda_el_correo_en_minusculas(db):
+    created = _new_user(email="  Ana@X.ES ")
+    assert repositorio.get_user(created.id).email == "ana@x.es"
+
+
+def test_create_user_sin_ninguna_credencial_lanza_value_error(db):
+    with pytest.raises(ValueError):
+        _new_user(password_hash=None, google_sub=None)
+    assert len(repositorio.list_users()) == 1  # no se creó
+
+
+@pytest.mark.parametrize("username", ["ana@x.es", "", "   "])
+def test_create_user_rechaza_username_con_arroba_o_vacio(db, username):
+    with pytest.raises(ValueError):
+        _new_user(username=username)
+
+
+def test_create_user_rechaza_un_rol_desconocido(db):
+    with pytest.raises(ValueError):
+        _new_user(role="jefe")
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"username": "admin"},  # username repetido
+        {"email": "A@X.es"},  # correo repetido aunque cambien las mayúsculas
+    ],
+)
+def test_create_user_repetido_lanza_already_exists(db, overrides):
+    with pytest.raises(repositorio.AlreadyExistsError):
+        _new_user(**overrides)
+    assert len(repositorio.list_users()) == 1
+
+
+def test_create_user_google_sub_repetido_lanza_already_exists(db):
+    _new_user(google_sub="g-1")
+    with pytest.raises(repositorio.AlreadyExistsError):
+        _new_user(username="otra", email="otra@x.es", google_sub="g-1")
+
+
+def test_create_user_varios_sin_google_sub_no_chocan(db):
+    # google_sub es único, pero vacío no cuenta como repetido.
+    _new_user()
+    _new_user(username="luis", email="luis@x.es")
+    assert len(repositorio.list_users()) == 3
+
+
+# ---------------------------------------------------------------------------------------
+# update_user
+# ---------------------------------------------------------------------------------------
+
+
+def test_update_user_cambia_solo_lo_indicado(db):
+    created = _new_user()
+    result = repositorio.update_user(created.id, {"role": "lector"})
+    assert result.role == "lector" and result.is_active is True
+    assert repositorio.get_user(created.id).password_hash == "hash-ana"
+
+
+def test_update_user_desactivar_y_verificar_son_cosas_distintas(db):
+    created = _new_user()
+    repositorio.update_user(created.id, {"email_verified": True})
+    repositorio.update_user(created.id, {"is_active": False})
+    stored = repositorio.get_user(created.id)
+    assert stored.email_verified is True and stored.is_active is False
+
+
+def test_update_user_cambia_la_contrasena(db):
+    created = _new_user()
+    repositorio.update_user(created.id, {"password_hash": "hash-nuevo"})
+    assert repositorio.get_user(created.id).password_hash == "hash-nuevo"
+
+
+def test_update_user_enlazar_y_desenlazar_google(db):
+    created = _new_user()
+    repositorio.update_user(created.id, {"google_sub": "g-9"})
+    assert repositorio.get_user_by_google_sub("g-9").id == created.id
+    repositorio.update_user(created.id, {"google_sub": None})  # aún tiene contraseña
+    assert repositorio.get_user_by_google_sub("g-9") is None
+
+
+def test_update_user_no_puede_quedarse_sin_credenciales(db):
+    created = _new_user()  # solo contraseña
+    with pytest.raises(ValueError):
+        repositorio.update_user(created.id, {"password_hash": None})
+    assert repositorio.get_user(created.id).password_hash == "hash-ana"
+
+
+def test_update_user_google_sub_de_otro_lanza_already_exists(db):
+    _new_user(google_sub="g-1")
+    other = _new_user(username="luis", email="luis@x.es")
+    with pytest.raises(repositorio.AlreadyExistsError):
+        repositorio.update_user(other.id, {"google_sub": "g-1"})
+
+
+def test_update_user_su_propio_google_sub_no_cuenta_como_repetido(db):
+    created = _new_user(google_sub="g-1")
+    assert repositorio.update_user(created.id, {"google_sub": "g-1"}) is not None
+
+
+@pytest.mark.parametrize("field", ["username", "email", "id", "created_at", "otro"])
+def test_update_user_rechaza_campos_no_editables(db, field):
+    with pytest.raises(ValueError):
+        repositorio.update_user(1, {field: "x"})
+
+
+@pytest.mark.parametrize("field", ["role", "is_active", "email_verified"])
+def test_update_user_no_admite_none_en_campos_obligatorios(db, field):
+    with pytest.raises(ValueError):
+        repositorio.update_user(1, {field: None})
+
+
+def test_update_user_rechaza_un_rol_desconocido(db):
+    with pytest.raises(ValueError):
+        repositorio.update_user(1, {"role": "jefe"})
+    assert repositorio.get_user(1).role == "admin"
+
+
+def test_update_user_inexistente_devuelve_none(db):
+    assert repositorio.update_user(999, {"role": "lector"}) is None
+
+
+# ---------------------------------------------------------------------------------------
+# Terreno: datos de prueba
+# ---------------------------------------------------------------------------------------
+
+ZONE_BODY = s.ZoneCreate(name="Bancal norte", type="crop", crop="aguacate", boundary=BOUNDARY)
+TREE = s.ElementCreate(
+    type="tree", subtype="aguacate", geometry=s.Geometry(type="Point", coordinates=[-3.0, 36.0]),
+    height_m=4.5,
+)
+PATH = s.ElementCreate(
+    type="path",
+    geometry=s.Geometry(type="LineString", coordinates=[[-3.0, 36.0], [-2.95, 36.05]]),
+)
+
+
+def _add_tank(db_engine, parcel_id=1, name="Balsa", capacity=10000.0, sensor_id=None):
+    with Session(db_engine) as session:
+        row = Tank(parcel_id=parcel_id, name=name, capacity_l=capacity, level_sensor_id=sensor_id)
+        session.add(row)
+        session.commit()
+        return row.id
+
+
+@pytest.fixture
+def nivel(db):
+    """Un sensor de nivel de depósito (d001) en la parcela 1."""
+    with Session(db) as session:
+        session.add(Sensor(id="d001", parcel_id=1, type="nivel_deposito", unit="%"))
+        session.commit()
+    return "d001"
+
+
+# ---------------------------------------------------------------------------------------
+# create_zone / create_element / delete_element
+# ---------------------------------------------------------------------------------------
+
+
+def test_create_zone_guarda_y_devuelve_la_zona(db):
+    zone = repositorio.create_zone(1, ZONE_BODY, 321.5)
+    assert isinstance(zone, s.Zone) and zone.id == 1 and zone.parcel_id == 1
+    assert (zone.name, zone.type, zone.crop, zone.area_m2) == ("Bancal norte", "crop", "aguacate", 321.5)
+    assert zone.boundary == BOUNDARY  # vuelve como Polygon, no como texto
+
+
+def test_create_zone_guarda_el_contorno_como_texto_geojson(db):
+    repositorio.create_zone(1, ZONE_BODY, None)
+    with Session(db) as session:
+        stored = session.get(Zone, 1).boundary
+    assert isinstance(stored, str) and s.Polygon.model_validate_json(stored) == BOUNDARY
+
+
+def test_create_zone_parcela_inexistente_lanza_not_found(db):
+    with pytest.raises(repositorio.NotFoundError):
+        repositorio.create_zone(999, ZONE_BODY, 1.0)
+
+
+def test_create_element_punto_y_linea(db):
+    tree = repositorio.create_element(1, TREE)
+    path = repositorio.create_element(1, PATH)
+    assert isinstance(tree, s.TerrainElement)
+    assert (tree.type, tree.subtype, tree.height_m) == ("tree", "aguacate", 4.5)
+    assert tree.geometry == TREE.geometry and path.geometry == PATH.geometry
+    assert path.subtype is None and path.height_m is None
+
+
+def test_create_element_parcela_inexistente_lanza_not_found(db):
+    with pytest.raises(repositorio.NotFoundError):
+        repositorio.create_element(999, TREE)
+
+
+def test_delete_element_borra_y_dice_si_existia(db):
+    tree = repositorio.create_element(1, TREE)
+    other = repositorio.create_element(1, PATH)
+    assert repositorio.delete_element(tree.id) is True
+    assert [e.id for e in repositorio.get_terrain(1).elements] == [other.id]  # el otro sigue
+    assert repositorio.delete_element(tree.id) is False  # ya no existe
+
+
+def test_delete_element_inexistente_devuelve_false(db):
+    assert repositorio.delete_element(999) is False
+
+
+# ---------------------------------------------------------------------------------------
+# tanks
+# ---------------------------------------------------------------------------------------
+
+
+def test_tanks_saca_el_nivel_de_la_ultima_lectura_del_sensor(db, nivel):
+    _add_tank(db, sensor_id=nivel)
+    repositorio.save_reading(nivel, at(0), 90.0)
+    repositorio.save_reading(nivel, at(5), 42.5)  # la más reciente
+    (tank,) = repositorio.tanks(1)
+    assert isinstance(tank, s.Tank)
+    assert (tank.level_pct, tank.available_l, tank.capacity_l) == (42.5, 4250.0, 10000.0)
+
+
+def test_tanks_usa_la_mas_reciente_aunque_se_guardara_antes(db, nivel):
+    _add_tank(db, sensor_id=nivel)
+    repositorio.save_reading(nivel, at(5), 30.0)
+    repositorio.save_reading(nivel, at(1), 80.0)  # llega tarde, pero es más antigua
+    assert repositorio.tanks(1)[0].level_pct == 30.0
+
+
+def test_tanks_redondea_los_litros_a_un_decimal(db, nivel):
+    _add_tank(db, capacity=333.0, sensor_id=nivel)
+    repositorio.save_reading(nivel, at(0), 33.33)
+    assert repositorio.tanks(1)[0].available_l == 111.0  # 110.9889 -> 111.0
+
+
+@pytest.mark.parametrize("with_sensor", [False, True])  # sin sensor / sensor sin lecturas
+def test_tanks_sin_dato_de_nivel_deja_none(db, nivel, with_sensor):
+    _add_tank(db, sensor_id=nivel if with_sensor else None)
+    tank = repositorio.tanks(1)[0]
+    assert tank.level_pct is None and tank.available_l is None  # "no se sabe", no "vacío"
+
+
+def test_tanks_un_nivel_cero_no_es_none(db, nivel):
+    _add_tank(db, sensor_id=nivel)
+    repositorio.save_reading(nivel, at(0), 0.0)
+    tank = repositorio.tanks(1)[0]
+    assert tank.level_pct == 0.0 and tank.available_l == 0.0
+
+
+def test_tanks_varios_por_orden_y_solo_de_esa_parcela(db, nivel):
+    first = _add_tank(db, name="Balsa", sensor_id=nivel)
+    second = _add_tank(db, name="Aljibe")
+    _add_tank(db, parcel_id=2, name="De otra parcela")
+    assert [t.id for t in repositorio.tanks(1)] == [first, second]
+
+
+@pytest.mark.parametrize("parcel_id", [2, 999])  # sin depósitos / inexistente
+def test_tanks_sin_depositos_devuelve_lista_vacia(db, parcel_id):
+    assert repositorio.tanks(parcel_id) == []
+
+
+# ---------------------------------------------------------------------------------------
+# get_terrain
+# ---------------------------------------------------------------------------------------
+
+
+def test_get_terrain_reune_todo_lo_de_la_parcela(db, nivel):
+    zone = repositorio.create_zone(1, ZONE_BODY, 100.0)
+    tree = repositorio.create_element(1, TREE)
+    _add_tank(db, sensor_id=nivel)
+    terrain = repositorio.get_terrain(1)
+    assert isinstance(terrain, s.Terrain)
+    assert isinstance(terrain.parcel, s.ParcelDetail) and terrain.parcel.boundary == BOUNDARY
+    assert [z.id for z in terrain.zones] == [zone.id]
+    assert [e.id for e in terrain.elements] == [tree.id]
+    assert [x.id for x in terrain.sensors] == ["a001", "d001", "h001", "t001"]  # con desactivado
+    assert [t.name for t in terrain.tanks] == ["Balsa"]
+
+
+def test_get_terrain_no_mezcla_parcelas(db):
+    repositorio.create_zone(1, ZONE_BODY, None)
+    repositorio.create_element(1, TREE)
+    terrain = repositorio.get_terrain(2)
+    assert (terrain.zones, terrain.elements, terrain.sensors, terrain.tanks) == ([], [], [], [])
+
+
+def test_get_terrain_de_una_parcela_de_baja(db):
+    # Como get_parcel: pedir una parcela concreta no la oculta; ocultarla es cosa de la API.
+    assert repositorio.get_terrain(3).parcel.is_active is False
+
+
+def test_get_terrain_parcela_inexistente_devuelve_none(db):
+    assert repositorio.get_terrain(999) is None
+
+
+# ---------------------------------------------------------------------------------------
+# Costes
+# ---------------------------------------------------------------------------------------
+
+
+def _move(parcel_id=1, kind="expense", category="agua", amount=100.0, day=1, description=None):
+    return repositorio.create_transaction(
+        parcel_id,
+        s.TransactionCreate(
+            kind=kind, category=category, amount=amount, occurred_on=date(2026, 11, day),
+            description=description,
+        ),
+    )
+
+
+def test_create_transaction_guarda_y_devuelve_el_movimiento(db):
+    move = _move(kind="income", category="venta", amount=1850.0, day=3, description="1.ª partida")
+    assert isinstance(move, s.Transaction) and move.id == 1 and move.parcel_id == 1
+    assert (move.kind, move.category, move.amount) == ("income", "venta", 1850.0)
+    assert move.occurred_on == date(2026, 11, 3) and move.description == "1.ª partida"
+
+
+def test_create_transaction_parcela_inexistente_lanza_not_found(db):
+    with pytest.raises(repositorio.NotFoundError):
+        _move(parcel_id=999)
+
+
+def test_transactions_los_mas_recientes_primero(db):
+    old = _move(day=1)
+    new = _move(day=9)
+    mid = _move(day=5)
+    assert [t.id for t in repositorio.transactions(1)] == [new.id, mid.id, old.id]
+
+
+def test_transactions_misma_fecha_el_ultimo_apuntado_primero(db):
+    first = _move(day=4)
+    second = _move(day=4)
+    assert [t.id for t in repositorio.transactions(1)] == [second.id, first.id]
+
+
+def test_transactions_solo_de_esa_parcela(db):
+    _move(parcel_id=1)
+    other = _move(parcel_id=2)
+    assert [t.id for t in repositorio.transactions(2)] == [other.id]
+
+
+@pytest.mark.parametrize("parcel_id", [3, 999])  # sin movimientos / inexistente
+def test_transactions_sin_movimientos_devuelve_lista_vacia(db, parcel_id):
+    assert repositorio.transactions(parcel_id) == []
+
+
+def test_balance_suma_ingresos_gastos_y_saldo(db):
+    # Los mismos movimientos que había en sample_data, para comprobar que sale igual.
+    _move(kind="income", category="venta", amount=1850.00, day=1)
+    _move(kind="expense", category="agua", amount=126.40, day=2)
+    _move(kind="expense", category="abono", amount=310.00, day=3)
+    _move(kind="expense", category="agua", amount=98.75, day=9)
+    _move(kind="income", category="venta", amount=920.00, day=12)
+    result = repositorio.balance(1)
+    assert isinstance(result, s.Balance) and result.parcel_id == 1
+    assert (result.income, result.expense, result.balance) == (2770.00, 535.15, 2234.85)
+    assert result.by_category == {"abono": -310.00, "agua": -225.15, "venta": 2770.00}
+
+
+def test_balance_compensa_una_categoria_con_ingresos_y_gastos(db):
+    _move(kind="expense", category="agua", amount=100.0)
+    _move(kind="income", category="agua", amount=20.0)  # una devolución
+    result = repositorio.balance(1)
+    assert result.by_category == {"agua": -80.0}
+    assert (result.income, result.expense, result.balance) == (20.0, 100.0, -80.0)
+
+
+def test_balance_redondea_a_centimos_al_final(db):
+    # 0.1 + 0.2 en coma flotante es 0.30000000000000004: debe salir 0.3.
+    _move(kind="income", category="venta", amount=0.1)
+    _move(kind="income", category="venta", amount=0.2)
+    result = repositorio.balance(1)
+    assert result.income == 0.3 and result.by_category == {"venta": 0.3}
+
+
+def test_balance_solo_cuenta_esa_parcela(db):
+    _move(parcel_id=1, amount=50.0)
+    _move(parcel_id=2, amount=999.0)
+    assert repositorio.balance(1).expense == 50.0
+
+
+@pytest.mark.parametrize("parcel_id", [3, 999])  # sin movimientos / inexistente
+def test_balance_sin_movimientos_todo_a_cero(db, parcel_id):
+    result = repositorio.balance(parcel_id)
+    assert (result.income, result.expense, result.balance, result.by_category) == (0, 0, 0, {})

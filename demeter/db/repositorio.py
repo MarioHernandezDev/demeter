@@ -16,12 +16,15 @@ import math
 from datetime import datetime, timezone
 
 from sqlalchemy import and_, func, or_, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlmodel import Session, select
 
 from demeter.api import schemas as s
 from demeter.db import conexion
-from demeter.models import Alert, Parcel, Sensor, SensorData
+from demeter.models import (
+    Alert, Parcel, Sensor, SensorData, Tank, TerrainElement, Transaction, User, Zone,
+)
 
 # ---------------------------------------------------------------------------------------
 # Errores
@@ -113,6 +116,7 @@ def _parcel(row: Parcel) -> s.Parcel:
         latitude=row.latitude,
         longitude=row.longitude,
         area_m2=row.area_m2,
+        is_active=row.is_active,
     )
 
 
@@ -512,3 +516,443 @@ def sensors_last_seen() -> list[tuple[str, datetime | None]]:
             .order_by(Sensor.id)
         ).all()
         return [(code, seen) for code, seen in rows]
+
+
+# ---------------------------------------------------------------------------------------
+# Usuarios (entrega 3)
+#
+# Las funciones de BÚSQUEDA devuelven el modelo ``User`` de la base de datos, no el esquema
+# ``s.User``: el login necesita ``password_hash`` y el esquema no lo lleva (contrato, regla 2).
+# Se devuelven ya desligados de la sesión, con todos sus campos cargados, así que se pueden leer
+# sin problema; pero modificarlos NO cambia la base de datos: para eso está ``update_user``.
+#
+# El repositorio comprueba la integridad de los datos (correo en minúsculas, sin duplicados,
+# alguna forma de entrar). Quién puede crear o cambiar usuarios lo decide la API.
+# ---------------------------------------------------------------------------------------
+
+_ROLES = {"admin", "tecnico", "lector"}
+_USER_EDITABLE = {"role", "is_active", "email_verified", "password_hash", "google_sub"}
+_USER_NOT_NULL = {"role", "is_active", "email_verified"}  # no admiten ``None``
+
+
+def _user(row: User) -> s.User:
+    # ``email`` y ``email_verified`` se pasan aunque ``s.User`` aún no los tenga: Pydantic ignora
+    # los campos que el esquema no declara, y en cuanto Alex los añada saldrán sin tocar nada aquí.
+    return s.User(
+        id=row.id,
+        username=row.username,
+        role=row.role,
+        is_active=row.is_active,
+        email=row.email,
+        email_verified=row.email_verified,
+    )
+
+
+def _normalize_email(email: str) -> str:
+    # "Ana@Correo.ES " y "ana@correo.es" son el mismo buzón: se guarda y se busca siempre igual.
+    return email.strip().lower()
+
+
+def _find_user(**where) -> User | None:
+    """Busca un usuario por un campo y lo devuelve desligado de la sesión (ver arriba).
+
+    Al cerrarse la sesión sin ``commit``, la fila queda desligada pero con todos sus campos ya
+    leídos, así que se puede usar fuera. (Un ``commit`` sí los caducaría y fallaría al leerlos.)
+    """
+    with conexion.open_session() as session:
+        query = select(User)
+        for field, value in where.items():
+            query = query.where(getattr(User, field) == value)
+        return session.exec(query).first()
+
+
+def get_user(user_id: int) -> User | None:
+    """Un usuario por su id (la API lo usa en cada petición para leer el rol y si está activo)."""
+    return _find_user(id=user_id)
+
+
+def get_user_by_username(username: str) -> User | None:
+    """Para el login con contraseña. Un usuario que solo entra con Google trae
+    ``password_hash=None``: la API debe tratarlo como contraseña incorrecta."""
+    return _find_user(username=username)
+
+
+def get_user_by_email(email: str) -> User | None:
+    """Para el registro y la recuperación de contraseña. Busca el correo en minúsculas."""
+    return _find_user(email=_normalize_email(email))
+
+
+def get_user_by_google_sub(google_sub: str) -> User | None:
+    """Para el login con Google. Es la ÚNICA forma de enlazar una cuenta de Google: nunca por
+    correo, porque quien controle un correo igual en Google podría entrar en otra cuenta."""
+    return _find_user(google_sub=google_sub)
+
+
+def list_users() -> list[s.User]:
+    """Todos los usuarios por orden de id, también los desactivados. Sin contraseña."""
+    with conexion.open_session() as session:
+        return [_user(row) for row in session.exec(select(User).order_by(User.id)).all()]
+
+
+def _check_unique(session: Session, user_id: int | None, **values) -> None:
+    """Lanza ``AlreadyExistsError`` si otro usuario ya tiene alguno de esos valores.
+
+    Se comprueba antes de guardar para poder decir QUÉ campo está repetido (la base de datos solo
+    diría "UNIQUE constraint failed"). ``user_id`` excluye al propio usuario al editarlo.
+    """
+    for field, value in values.items():
+        if value is None:
+            continue  # varios usuarios pueden no tener google_sub
+        query = select(User.id).where(getattr(User, field) == value)
+        if user_id is not None:
+            query = query.where(User.id != user_id)
+        if session.exec(query).first() is not None:
+            raise AlreadyExistsError(f"Ya existe un usuario con ese {field}")
+
+
+def create_user(
+    username: str,
+    email: str,
+    role: str,
+    password_hash: str | None = None,
+    google_sub: str | None = None,
+    email_verified: bool = False,
+) -> s.User:
+    """Crea un usuario y lo devuelve sin contraseña.
+
+    - Necesita ``password_hash`` o ``google_sub`` (o los dos): si no, nadie podría entrar con él
+      (``ValueError``; la base de datos también lo impide).
+    - El ``username`` no puede llevar ``@``: así un texto con ``@`` en el login es siempre un
+      correo y nunca se confunde con un nombre de usuario (``ValueError``).
+    - ``role`` debe ser ``admin``, ``tecnico`` o ``lector`` (``ValueError``).
+    - El correo se guarda en minúsculas.
+    - ``username``, ``email`` o ``google_sub`` repetidos: ``AlreadyExistsError``.
+    - ``password_hash`` llega ya calculado: cifrar la contraseña es cosa de la API
+      (``security.hash_password``), el repositorio nunca ve la contraseña en claro.
+    """
+    username = username.strip()
+    email = _normalize_email(email)
+    if not username or "@" in username:
+        raise ValueError("El nombre de usuario no puede estar vacío ni llevar @")
+    if not email:
+        raise ValueError("El correo no puede estar vacío")
+    if role not in _ROLES:
+        raise ValueError(f"Rol no válido: {role!r}")
+    if password_hash is None and google_sub is None:
+        raise ValueError("Hace falta password_hash o google_sub para poder entrar")
+
+    with conexion.open_session() as session:
+        _check_unique(session, None, username=username, email=email, google_sub=google_sub)
+        row = User(
+            username=username, email=email, role=role, password_hash=password_hash,
+            google_sub=google_sub, email_verified=email_verified,
+        )
+        session.add(row)
+        try:
+            session.commit()
+        except IntegrityError as error:
+            # Dos registros simultáneos con el mismo dato: los dos pasan la comprobación de arriba
+            # y el índice único de la base de datos frena al segundo. Se traduce al error propio.
+            raise AlreadyExistsError("Ya existe un usuario con esos datos") from error
+        return _user(row)
+
+
+def update_user(user_id: int, changes: dict) -> s.User | None:
+    """Cambia SOLO los campos que vienen en ``changes``, como ``update_sensor``.
+
+    Editables: ``role``, ``is_active`` (cuenta habilitada), ``email_verified`` (correo
+    confirmado), ``password_hash`` y ``google_sub``. ``is_active`` y ``email_verified`` son cosas
+    distintas: una cuenta puede estar confirmada y deshabilitada.
+
+    - Otra clave: ``ValueError``, sin cambiar nada. ``username`` y ``email`` no se editan aquí.
+    - ``None`` en ``role``, ``is_active`` o ``email_verified``: ``ValueError``.
+    - ``None`` en ``password_hash`` o ``google_sub`` lo deja vacío (p. ej. desenlazar Google),
+      pero no se pueden quedar los DOS vacíos: ``ValueError``.
+    - ``google_sub`` de otro usuario: ``AlreadyExistsError``. Usuario inexistente: ``None``.
+    """
+    unknown = set(changes) - _USER_EDITABLE
+    if unknown:
+        raise ValueError(f"Campos no editables en un usuario: {sorted(unknown)}")
+    for field in _USER_NOT_NULL & set(changes):
+        if changes[field] is None:
+            raise ValueError(f"{field} no puede ser None")
+    if "role" in changes and changes["role"] not in _ROLES:
+        raise ValueError(f"Rol no válido: {changes['role']!r}")
+
+    with conexion.open_session() as session:
+        row = session.get(User, user_id)
+        if row is None:
+            return None
+        # Cómo quedarían las credenciales tras el cambio, antes de tocar nada.
+        password_hash = changes.get("password_hash", row.password_hash)
+        google_sub = changes.get("google_sub", row.google_sub)
+        if password_hash is None and google_sub is None:
+            raise ValueError("El usuario se quedaría sin forma de entrar")
+        if "google_sub" in changes:
+            _check_unique(session, user_id, google_sub=google_sub)
+        for field, value in changes.items():
+            setattr(row, field, value)
+        try:
+            session.commit()
+        except IntegrityError as error:
+            raise AlreadyExistsError("Ya existe un usuario con ese google_sub") from error
+        return _user(row)
+
+
+# ---------------------------------------------------------------------------------------
+# Terreno y depósitos (entrega 3)
+#
+# Zonas y elementos guardan su forma como texto GeoJSON (SQLite no tiene tipo JSON), igual que el
+# contorno de la parcela: se convierte a texto al guardar y a objeto al leer, solo aquí.
+# ---------------------------------------------------------------------------------------
+
+
+def _zone(row: Zone) -> s.Zone:
+    return s.Zone(
+        id=row.id,
+        parcel_id=row.parcel_id,
+        name=row.name,
+        type=row.type,
+        crop=row.crop,
+        boundary=s.Polygon.model_validate_json(row.boundary),
+        area_m2=row.area_m2,
+    )
+
+
+def _element(row: TerrainElement) -> s.TerrainElement:
+    return s.TerrainElement(
+        id=row.id,
+        parcel_id=row.parcel_id,
+        type=row.type,
+        subtype=row.subtype,
+        geometry=s.Geometry.model_validate_json(row.geometry),
+        height_m=row.height_m,
+    )
+
+
+def _tanks(session: Session, parcel_id: int) -> list[s.Tank]:
+    """Los depósitos de la parcela con su nivel, dentro de una sesión ya abierta."""
+    rows = session.exec(select(Tank).where(Tank.parcel_id == parcel_id).order_by(Tank.id)).all()
+
+    # El nivel de cada depósito es el ÚLTIMO valor de su sensor de nivel. Se piden todos los
+    # sensores de golpe (dos consultas en total, no una por depósito), como en ``last_readings``.
+    sensor_ids = {row.level_sensor_id for row in rows if row.level_sensor_id}
+    level: dict[str, float] = {}
+    if sensor_ids:
+        newest = (
+            select(SensorData.sensor_id, func.max(SensorData.recorded_at).label("recorded_at"))
+            .where(SensorData.sensor_id.in_(sensor_ids))
+            .group_by(SensorData.sensor_id)
+            .subquery()
+        )
+        level = dict(session.exec(
+            select(SensorData.sensor_id, SensorData.value).join(
+                newest,
+                and_(
+                    SensorData.sensor_id == newest.c.sensor_id,
+                    SensorData.recorded_at == newest.c.recorded_at,
+                ),
+            )
+        ).all())
+
+    tanks = []
+    for row in rows:
+        pct = level.get(row.level_sensor_id)  # None si no tiene sensor o aún no hay lecturas
+        tanks.append(s.Tank(
+            id=row.id,
+            parcel_id=row.parcel_id,
+            name=row.name,
+            capacity_l=row.capacity_l,
+            level_sensor_id=row.level_sensor_id,
+            level_pct=pct,
+            # Litros disponibles = capacidad × porcentaje. Se redondea a 1 decimal, como hacía
+            # ``sample_data``, para que el riego de Mario H. reciba lo mismo que hasta ahora.
+            available_l=round(row.capacity_l * pct / 100, 1) if pct is not None else None,
+            latitude=row.latitude,
+            longitude=row.longitude,
+        ))
+    return tanks
+
+
+def tanks(parcel_id: int) -> list[s.Tank]:
+    """Depósitos de la parcela por orden de id, con el nivel sacado de la última lectura de su
+    sensor. Sin sensor o sin lecturas, ``level_pct`` y ``available_l`` van a ``None`` (no se sabe,
+    que no es lo mismo que vacío). Parcela inexistente o sin depósitos: lista vacía.
+
+    El porcentaje se devuelve tal como lo midió el sensor, sin recortarlo a 0-100: decidir qué
+    hacer con una lectura imposible es cosa de quien la usa, no del repositorio."""
+    with conexion.open_session() as session:
+        return _tanks(session, parcel_id)
+
+
+def get_terrain(parcel_id: int) -> s.Terrain | None:
+    """Todo lo que necesita el editor 3D en una llamada: la parcela con su contorno, sus zonas,
+    elementos, sensores (también los desactivados, como ``parcel_sensors``; ocultarlos según el
+    rol es cosa de la API) y depósitos. ``None`` si la parcela no existe."""
+    with conexion.open_session() as session:
+        parcel = session.get(Parcel, parcel_id)
+        if parcel is None:
+            return None
+        zones = session.exec(select(Zone).where(Zone.parcel_id == parcel_id).order_by(Zone.id)).all()
+        elements = session.exec(
+            select(TerrainElement)
+            .where(TerrainElement.parcel_id == parcel_id)
+            .order_by(TerrainElement.id)
+        ).all()
+        sensors = session.exec(
+            select(Sensor).where(Sensor.parcel_id == parcel_id).order_by(Sensor.id)
+        ).all()
+        return s.Terrain(
+            parcel=_parcel_detail(parcel),
+            zones=[_zone(row) for row in zones],
+            elements=[_element(row) for row in elements],
+            sensors=[_sensor(row) for row in sensors],
+            tanks=_tanks(session, parcel_id),
+        )
+
+
+def _require_parcel(session: Session, parcel_id: int) -> None:
+    # Escribir en una parcela que no existe es un error (contrato, regla 5). Se comprueba aquí para
+    # dar un ``NotFoundError`` claro en vez del error genérico de clave foránea de la base de datos.
+    if session.get(Parcel, parcel_id) is None:
+        raise NotFoundError(f"La parcela {parcel_id} no existe")
+
+
+def create_zone(parcel_id: int, body: s.ZoneCreate, area_m2: float | None) -> s.Zone:
+    """Crea una zona en la parcela. La superficie la calcula la API (``geo.polygon_area_m2``) y
+    aquí solo se guarda. Parcela inexistente: ``NotFoundError``."""
+    with conexion.open_session() as session:
+        _require_parcel(session, parcel_id)
+        row = Zone(
+            parcel_id=parcel_id,
+            name=body.name,
+            type=body.type,
+            crop=body.crop,
+            boundary=body.boundary.model_dump_json(),
+            area_m2=area_m2,
+        )
+        session.add(row)
+        session.commit()
+        return _zone(row)
+
+
+def create_element(parcel_id: int, body: s.ElementCreate) -> s.TerrainElement:
+    """Crea un árbol, bancal o camino en la parcela. Parcela inexistente: ``NotFoundError``."""
+    with conexion.open_session() as session:
+        _require_parcel(session, parcel_id)
+        row = TerrainElement(
+            parcel_id=parcel_id,
+            type=body.type,
+            subtype=body.subtype,
+            geometry=body.geometry.model_dump_json(),
+            height_m=body.height_m,
+        )
+        session.add(row)
+        session.commit()
+        return _element(row)
+
+
+def delete_element(element_id: int) -> bool:
+    """Borra un elemento del terreno. ``True`` si lo borró, ``False`` si no existía.
+
+    Es lo ÚNICO que el repositorio borra de verdad (contrato, regla 7): un árbol mal colocado no
+    tiene historial que conservar, a diferencia de una parcela o un sensor.
+    """
+    with conexion.open_session() as session:
+        row = session.get(TerrainElement, element_id)
+        if row is None:
+            return False
+        session.delete(row)
+        session.commit()
+        return True
+
+
+# ---------------------------------------------------------------------------------------
+# Costes (entrega 3)
+#
+# El importe se guarda SIEMPRE en positivo y el signo lo da ``kind`` (``income`` o ``expense``),
+# como en el esquema de la API. Así no hay dos formas de escribir un gasto (-50 o 50 con
+# ``expense``) que luego se sumen mal.
+# ---------------------------------------------------------------------------------------
+
+
+def _transaction(row: Transaction) -> s.Transaction:
+    return s.Transaction(
+        id=row.id,
+        parcel_id=row.parcel_id,
+        kind=row.kind,
+        category=row.category,
+        amount=row.amount,
+        occurred_on=row.occurred_on,
+        description=row.description,
+    )
+
+
+def transactions(parcel_id: int) -> list[s.Transaction]:
+    """Movimientos de la parcela, los más recientes primero (por fecha; a igual fecha, el último
+    apuntado primero). Parcela inexistente o sin movimientos: lista vacía."""
+    with conexion.open_session() as session:
+        rows = session.exec(
+            select(Transaction)
+            .where(Transaction.parcel_id == parcel_id)
+            .order_by(Transaction.occurred_on.desc(), Transaction.id.desc())
+        ).all()
+        return [_transaction(row) for row in rows]
+
+
+def create_transaction(parcel_id: int, body: s.TransactionCreate) -> s.Transaction:
+    """Apunta un ingreso o un gasto. Parcela inexistente: ``NotFoundError``.
+
+    Que el importe sea positivo y la categoría no esté vacía ya lo comprueba el esquema
+    ``TransactionCreate`` antes de llegar aquí.
+    """
+    with conexion.open_session() as session:
+        _require_parcel(session, parcel_id)
+        row = Transaction(
+            parcel_id=parcel_id,
+            kind=body.kind,
+            category=body.category,
+            amount=body.amount,
+            occurred_on=body.occurred_on,
+            description=body.description,
+        )
+        session.add(row)
+        session.commit()
+        return _transaction(row)
+
+
+def balance(parcel_id: int) -> s.Balance:
+    """Ingresos, gastos y saldo de la parcela, y el saldo de cada categoría.
+
+    - ``by_category``: ingresos en positivo y gastos en negativo; si una categoría tiene de los
+      dos, se compensan (p. ej. ``agua``: una devolución de 20 y un recibo de 100 dan -80).
+    - Todo redondeado a 2 decimales (céntimos) AL FINAL: redondear cada sumando por separado
+      acumularía errores.
+    - Parcela inexistente o sin movimientos: todo a 0. Comprobar que la parcela existe es cosa
+      de la API, como en el resto de consultas.
+    """
+    with conexion.open_session() as session:
+        # Las sumas las hace la base de datos (una fila por tipo y categoría), en lugar de traer
+        # todos los movimientos a Python para sumarlos.
+        rows = session.exec(
+            select(Transaction.kind, Transaction.category, func.sum(Transaction.amount))
+            .where(Transaction.parcel_id == parcel_id)
+            .group_by(Transaction.kind, Transaction.category)
+        ).all()
+
+    income = expense = 0.0
+    by_category: dict[str, float] = {}
+    for kind, category, total in rows:
+        signed = total if kind == "income" else -total
+        by_category[category] = by_category.get(category, 0.0) + signed
+        if kind == "income":
+            income += total
+        else:
+            expense += total
+    return s.Balance(
+        parcel_id=parcel_id,
+        income=round(income, 2),
+        expense=round(expense, 2),
+        balance=round(income - expense, 2),
+        by_category={category: round(value, 2) for category, value in sorted(by_category.items())},
+    )
