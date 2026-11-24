@@ -887,3 +887,223 @@ def test_sensors_last_seen_sigue_a_las_bajas_y_reactivaciones(db):
     assert repositorio.sensors_last_seen() == []
     repositorio.set_parcel_active(3, True)
     assert [code for code, _ in repositorio.sensors_last_seen()] == ["t003"]
+
+
+# ---------------------------------------------------------------------------------------
+# is_active en las parcelas
+# ---------------------------------------------------------------------------------------
+
+
+def test_las_parcelas_dicen_si_estan_activas(db):
+    estados = {p.id: p.is_active for p in repositorio.list_parcels(include_inactive=True)}
+    assert estados == {1: True, 2: True, 3: False}
+    assert repositorio.get_parcel(3).is_active is False
+
+
+def test_set_parcel_active_devuelve_el_estado_nuevo(db):
+    assert repositorio.set_parcel_active(1, False).is_active is False
+    assert repositorio.set_parcel_active(1, True).is_active is True
+
+
+# ---------------------------------------------------------------------------------------
+# Usuarios: búsquedas
+# ---------------------------------------------------------------------------------------
+# El fixture ``db`` ya trae el usuario 1: admin / a@x.es / password_hash="x".
+
+
+def _new_user(**overrides):
+    data = dict(username="ana", email="ana@x.es", role="tecnico", password_hash="hash-ana")
+    data.update(overrides)
+    return repositorio.create_user(**data)
+
+
+def test_get_user_devuelve_el_modelo_con_password_hash(db):
+    user = repositorio.get_user(1)
+    assert isinstance(user, User)  # el modelo de la base de datos, no el esquema
+    assert (user.username, user.password_hash, user.role) == ("admin", "x", "admin")
+
+
+def test_get_user_se_puede_leer_con_la_sesion_cerrada(db):
+    user = repositorio.get_user_by_username("admin")
+    # Si siguiera ligado a una sesión cerrada, leer estos campos fallaría.
+    assert user.email == "a@x.es" and user.is_active is True and user.created_at is not None
+
+
+@pytest.mark.parametrize(
+    "call",
+    [
+        lambda: repositorio.get_user(999),
+        lambda: repositorio.get_user_by_username("nadie"),
+        lambda: repositorio.get_user_by_email("nadie@x.es"),
+        lambda: repositorio.get_user_by_google_sub("g-nadie"),
+    ],
+)
+def test_busquedas_de_usuario_inexistente_devuelven_none(db, call):
+    assert call() is None
+
+
+def test_get_user_by_email_no_distingue_mayusculas_ni_espacios(db):
+    assert repositorio.get_user_by_email("  A@X.ES ").id == 1
+
+
+def test_get_user_by_google_sub(db):
+    created = _new_user(username="gina", email="gina@x.es", password_hash=None, google_sub="g-123")
+    user = repositorio.get_user_by_google_sub("g-123")
+    assert user.id == created.id and user.password_hash is None
+
+
+def test_list_users_por_orden_y_sin_contrasena(db):
+    _new_user()
+    users = repositorio.list_users()
+    assert [u.username for u in users] == ["admin", "ana"]
+    assert all(isinstance(u, s.User) for u in users)
+    assert not hasattr(users[0], "password_hash")
+
+
+def test_list_users_incluye_los_desactivados(db):
+    created = _new_user()
+    repositorio.update_user(created.id, {"is_active": False})
+    assert [u.is_active for u in repositorio.list_users()] == [True, False]
+
+
+# ---------------------------------------------------------------------------------------
+# create_user
+# ---------------------------------------------------------------------------------------
+
+
+def test_create_user_con_contrasena(db):
+    created = _new_user()
+    assert isinstance(created, s.User) and created.id == 2
+    assert (created.username, created.role, created.is_active) == ("ana", "tecnico", True)
+    stored = repositorio.get_user(created.id)
+    assert stored.password_hash == "hash-ana" and stored.email_verified is False
+
+
+def test_create_user_solo_con_google(db):
+    created = _new_user(password_hash=None, google_sub="g-1", email_verified=True)
+    stored = repositorio.get_user(created.id)
+    assert stored.password_hash is None and stored.google_sub == "g-1"
+    assert stored.email_verified is True
+
+
+def test_create_user_guarda_el_correo_en_minusculas(db):
+    created = _new_user(email="  Ana@X.ES ")
+    assert repositorio.get_user(created.id).email == "ana@x.es"
+
+
+def test_create_user_sin_ninguna_credencial_lanza_value_error(db):
+    with pytest.raises(ValueError):
+        _new_user(password_hash=None, google_sub=None)
+    assert len(repositorio.list_users()) == 1  # no se creó
+
+
+@pytest.mark.parametrize("username", ["ana@x.es", "", "   "])
+def test_create_user_rechaza_username_con_arroba_o_vacio(db, username):
+    with pytest.raises(ValueError):
+        _new_user(username=username)
+
+
+def test_create_user_rechaza_un_rol_desconocido(db):
+    with pytest.raises(ValueError):
+        _new_user(role="jefe")
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"username": "admin"},  # username repetido
+        {"email": "A@X.es"},  # correo repetido aunque cambien las mayúsculas
+    ],
+)
+def test_create_user_repetido_lanza_already_exists(db, overrides):
+    with pytest.raises(repositorio.AlreadyExistsError):
+        _new_user(**overrides)
+    assert len(repositorio.list_users()) == 1
+
+
+def test_create_user_google_sub_repetido_lanza_already_exists(db):
+    _new_user(google_sub="g-1")
+    with pytest.raises(repositorio.AlreadyExistsError):
+        _new_user(username="otra", email="otra@x.es", google_sub="g-1")
+
+
+def test_create_user_varios_sin_google_sub_no_chocan(db):
+    # google_sub es único, pero vacío no cuenta como repetido.
+    _new_user()
+    _new_user(username="luis", email="luis@x.es")
+    assert len(repositorio.list_users()) == 3
+
+
+# ---------------------------------------------------------------------------------------
+# update_user
+# ---------------------------------------------------------------------------------------
+
+
+def test_update_user_cambia_solo_lo_indicado(db):
+    created = _new_user()
+    result = repositorio.update_user(created.id, {"role": "lector"})
+    assert result.role == "lector" and result.is_active is True
+    assert repositorio.get_user(created.id).password_hash == "hash-ana"
+
+
+def test_update_user_desactivar_y_verificar_son_cosas_distintas(db):
+    created = _new_user()
+    repositorio.update_user(created.id, {"email_verified": True})
+    repositorio.update_user(created.id, {"is_active": False})
+    stored = repositorio.get_user(created.id)
+    assert stored.email_verified is True and stored.is_active is False
+
+
+def test_update_user_cambia_la_contrasena(db):
+    created = _new_user()
+    repositorio.update_user(created.id, {"password_hash": "hash-nuevo"})
+    assert repositorio.get_user(created.id).password_hash == "hash-nuevo"
+
+
+def test_update_user_enlazar_y_desenlazar_google(db):
+    created = _new_user()
+    repositorio.update_user(created.id, {"google_sub": "g-9"})
+    assert repositorio.get_user_by_google_sub("g-9").id == created.id
+    repositorio.update_user(created.id, {"google_sub": None})  # aún tiene contraseña
+    assert repositorio.get_user_by_google_sub("g-9") is None
+
+
+def test_update_user_no_puede_quedarse_sin_credenciales(db):
+    created = _new_user()  # solo contraseña
+    with pytest.raises(ValueError):
+        repositorio.update_user(created.id, {"password_hash": None})
+    assert repositorio.get_user(created.id).password_hash == "hash-ana"
+
+
+def test_update_user_google_sub_de_otro_lanza_already_exists(db):
+    _new_user(google_sub="g-1")
+    other = _new_user(username="luis", email="luis@x.es")
+    with pytest.raises(repositorio.AlreadyExistsError):
+        repositorio.update_user(other.id, {"google_sub": "g-1"})
+
+
+def test_update_user_su_propio_google_sub_no_cuenta_como_repetido(db):
+    created = _new_user(google_sub="g-1")
+    assert repositorio.update_user(created.id, {"google_sub": "g-1"}) is not None
+
+
+@pytest.mark.parametrize("field", ["username", "email", "id", "created_at", "otro"])
+def test_update_user_rechaza_campos_no_editables(db, field):
+    with pytest.raises(ValueError):
+        repositorio.update_user(1, {field: "x"})
+
+
+@pytest.mark.parametrize("field", ["role", "is_active", "email_verified"])
+def test_update_user_no_admite_none_en_campos_obligatorios(db, field):
+    with pytest.raises(ValueError):
+        repositorio.update_user(1, {field: None})
+
+
+def test_update_user_rechaza_un_rol_desconocido(db):
+    with pytest.raises(ValueError):
+        repositorio.update_user(1, {"role": "jefe"})
+    assert repositorio.get_user(1).role == "admin"
+
+
+def test_update_user_inexistente_devuelve_none(db):
+    assert repositorio.update_user(999, {"role": "lector"}) is None
