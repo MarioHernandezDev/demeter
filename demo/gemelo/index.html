@@ -1,0 +1,621 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Demeter · Demo gemelo digital (PNOA + MDT IGN)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body { margin: 0; font: 14px system-ui, sans-serif; background: #14181c; color: #e6e6e6; height: 100vh; display: flex; flex-direction: column; }
+  header { padding: 8px 14px; background: #1d2329; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; border-bottom: 1px solid #2c343c; }
+  header h1 { font-size: 15px; margin: 0 10px 0 0; color: #9ccc65; }
+  button { background: #2e7d32; color: #fff; border: 0; padding: 6px 10px; border-radius: 5px; cursor: pointer; font-size: 13px; }
+  button.sec { background: #37474f; }
+  button.on { outline: 2px solid #ffb300; background: #4e5b31; }
+  button:disabled { opacity: .4; cursor: default; }
+  label { font-size: 13px; display: flex; gap: 5px; align-items: center; }
+  main { flex: 1; display: flex; min-height: 0; }
+  #map, #view { flex: 1; position: relative; }
+  #view canvas { display: block; }
+  #info { position: absolute; left: 10px; top: 10px; background: #000b; padding: 8px 10px; border-radius: 6px; font-size: 12px; max-width: 330px; line-height: 1.45; pointer-events: none; }
+  #status { font-size: 12px; color: #b0bec5; }
+  .sep { width: 1px; height: 22px; background: #3a444d; }
+  #edit { position: absolute; right: 10px; top: 10px; background: #000d; padding: 10px 12px; border-radius: 6px; font-size: 13px; line-height: 1.7; width: 250px; }
+  #edit input[type=number] { width: 80px; background: #263238; color: #fff; border: 1px solid #546e7a; border-radius: 4px; padding: 3px 5px; font-size: 14px; }
+  #edit button { padding: 3px 9px; margin-right: 4px; }
+  #tip { position: absolute; pointer-events: none; background: #000d; color: #ffe082; padding: 3px 7px; border-radius: 4px; font-size: 12px; white-space: nowrap; }
+  #dlgEjemplo { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); background: #1d2329; border: 1px solid #455a64; border-radius: 8px; padding: 14px 16px; width: 380px; font-size: 13px; z-index: 20; box-shadow: 0 8px 30px #000a; }
+  #dlgEjemplo .sub { color: #b0bec5; font-size: 12px; margin: 6px 0 10px; }
+  #dlgEjemplo label { display: flex; justify-content: space-between; gap: 8px; margin: 7px 0; }
+  #dlgEjemplo label.chk { justify-content: flex-start; align-items: flex-start; line-height: 1.4; }
+  #dlgEjemplo select, #dlgEjemplo input[type=text] { background: #263238; color: #fff; border: 1px solid #546e7a; border-radius: 4px; padding: 3px 5px; width: 210px; }
+  #dlgEjemplo .row { display: flex; gap: 8px; margin-top: 12px; }
+  #help { position: absolute; left: 10px; bottom: 10px; background: #000a; padding: 6px 9px; border-radius: 6px; font-size: 11px; line-height: 1.55; color: #cfd8dc; max-width: 330px; pointer-events: none; }
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<header>
+  <h1>Demeter · Gemelo digital (demo)</h1>
+  <button id="bParcela">1 · Dibujar mi terreno</button>
+  <button id="bGenerar">2 · Generar plano</button>
+  <span class="sep"></span>
+  <button id="bMuro" class="sec" disabled>3 · Dibujar muro</button>
+  <button id="bDetectar" disabled title="Busca los muros en la ortofoto (visión por computador)">✨ Detectar bancales</button>
+  <button id="bBorrar" class="sec" disabled>Borrar muro</button>
+  <button id="bEjemplo" class="sec" disabled title="Guarda la parcela con sus muros corregidos para entrenar y evaluar el detector">💾 Guardar como ejemplo</button>
+  <label title="Desnivel que se pone automáticamente entre dos bancales vecinos">Altura de muro <input id="muro" type="range" min="0.5" max="3" step="0.25" value="1.5"><span id="muroV">1,5 m</span></label>
+  <button id="bDeshacer" class="sec" disabled title="Ctrl+Z">Deshacer</button>
+  <span class="sep"></span>
+  <button id="bModo" class="sec" disabled>Ver: gemelo</button>
+  <button id="bTex" class="sec" disabled>Textura: ortofoto</button>
+  <label>Exageración <input id="exag" type="range" min="1" max="3" step="0.25" value="1"><span id="exagV">1×</span></label>
+  <span id="status">Dibuja el contorno de tu terreno sobre la ortofoto PNOA.</span>
+</header>
+<main>
+  <div id="map"></div>
+  <div id="view">
+    <div id="info">Aún no hay gemelo generado.</div>
+    <div id="edit" hidden></div>
+    <div id="tip" hidden></div>
+    <div id="dlgEjemplo" hidden>
+      <b>Guardar como ejemplo de entrenamiento</b>
+      <p class="sub">Se guardan la ortofoto, el relieve y los muros tal como están ahora. Asegúrate de haberlos revisado: son la «respuesta correcta» con la que se medirá y entrenará el detector.</p>
+      <label>Cultivo
+        <select id="eCultivo">
+          <option value="olivo">Olivo</option><option value="aguacate">Aguacate</option><option value="mango">Mango</option>
+          <option value="chirimoya">Chirimoya</option><option value="almendro">Almendro</option><option value="otros_frutales">Otros frutales</option>
+          <option value="sin_arboles">Sin árboles / recién labrado</option><option value="invernadero_llano">Invernadero o zona llana</option>
+          <option value="mixto">Mixto</option>
+        </select></label>
+      <label>Árboles por bancal
+        <select id="eArboles"><option value="1">1 fila</option><option value="2">2 filas</option><option value="3+">3 o más</option><option value="0">Sin árboles</option><option value="variable">Variable</option></select></label>
+      <label>Dificultad
+        <select id="eDificultad"><option value="facil">Fácil (bordes muy claros)</option><option value="media" selected>Media</option><option value="dificil">Difícil (arbolado denso, sombras…)</option></select></label>
+      <label>Notas <input id="eNotas" type="text" placeholder="opcional: camino que cruza, muros de piedra…"></label>
+      <label class="chk"><input id="eRevisado" type="checkbox"> <span>He revisado todos los muros (borrado los falsos y dibujado los que faltan, por el <b>borde superior</b> del talud)</span></label>
+      <div class="row"><button id="eGuardar">Guardar ejemplo</button><button id="eCancelar" class="sec">Cancelar</button></div>
+    </div>
+    <div id="help" hidden>
+      <b>Mapa</b>: «Dibujar muro» → clic a lo largo del borde de cada muro que veas en la ortofoto (haz zoom para más precisión); doble clic para terminar. El muro debe ir de borde a borde del terreno o hasta otro muro.<br>
+      <b>3D</b>: clic en un bancal para seleccionarlo · arrastra arriba/abajo para cambiar su altura · o escríbela exacta en el panel.<br>
+      <b>Ctrl+Z</b>: deshacer.
+    </div>
+  </div>
+</main>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/proj4@2.11.0/dist/proj4.js"></script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// ---------- Utilidades ----------
+proj4.defs('EPSG:25830', '+proj=utm +zone=30 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs');
+const toUTM = ll => proj4('EPSG:4326', 'EPSG:25830', [ll.lng, ll.lat]);
+const $ = id => document.getElementById(id);
+const fmt = n => Math.round(n).toLocaleString('es-ES');
+const fm = n => (Math.round(n * 100) / 100).toFixed(2).replace('.', ',');
+const status = t => $('status').textContent = t;
+const N4 = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+
+// ---------- Mapa 2D ----------
+const qs = new URLSearchParams(location.search);   // ?lat=..&lng=..&z=.. para abrir en una zona concreta
+const map = L.map('map', { maxZoom: 21 }).setView([+(qs.get('lat') || 36.7585), +(qs.get('lng') || -3.5300)], +(qs.get('z') || 16));
+const pnoa = L.tileLayer('https://www.ign.es/wmts/pnoa-ma?service=WMTS&request=GetTile&version=1.0.0&Format=image/jpeg&layer=OI.OrthoimageCoverage&style=default&tilematrixset=GoogleMapsCompatible&TileMatrix={z}&TileRow={y}&TileCol={x}',
+  { maxZoom: 21, maxNativeZoom: 19, attribution: 'PNOA cedido por © <a href="https://www.ign.es">Instituto Geográfico Nacional</a>' }).addTo(map);
+const osm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 21, maxNativeZoom: 19, attribution: '© OpenStreetMap' });
+const catastro = L.tileLayer.wms('https://ovc.catastro.meh.es/Cartografia/WMS/ServidorWMS.aspx', {
+  layers: 'Catastro', format: 'image/png', transparent: true, maxZoom: 21, attribution: '© Dirección General del Catastro' });
+L.control.layers({ 'Ortofoto PNOA': pnoa, 'OpenStreetMap': osm }, { 'Lindes del Catastro': catastro }).addTo(map);
+L.control.scale({ imperial: false }).addTo(map);
+const parcelaLayer = new L.FeatureGroup().addTo(map);
+const murosLayer = new L.FeatureGroup().addTo(map);
+
+// ---------- Geometría ----------
+function areaUTM(p) { let a = 0; for (let i = 0; i < p.length; i++) { const [x1, y1] = p[i], [x2, y2] = p[(i + 1) % p.length]; a += x1 * y2 - x2 * y1; } return Math.abs(a) / 2; }
+function inside(x, y, p) { let c = false; for (let i = 0, j = p.length - 1; i < p.length; j = i++) { const [xi, yi] = p[i], [xj, yj] = p[j]; if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) c = !c; } return c; }
+// curva suave (Catmull-Rom) que pasa por los puntos clicados → muros curvos con pocos clics
+function catmull(P, perSeg = 12) {
+  if (P.length < 3) return P.slice();
+  const out = [];
+  for (let i = 0; i < P.length - 1; i++) {
+    const p0 = P[Math.max(0, i - 1)], p1 = P[i], p2 = P[i + 1], p3 = P[Math.min(P.length - 1, i + 2)];
+    for (let s = 0; s < perSeg; s++) {
+      const t = s / perSeg, t2 = t * t, t3 = t2 * t;
+      out.push([0, 1].map(k => .5 * (2 * p1[k] + (-p0[k] + p2[k]) * t + (2 * p0[k] - 5 * p1[k] + 4 * p2[k] - p3[k]) * t2 + (-p0[k] + 3 * p1[k] - 3 * p2[k] + p3[k]) * t3)));
+    }
+  }
+  out.push(P[P.length - 1]);
+  return out;
+}
+const llCurve = ll => catmull(ll.map(p => [p.lat, p.lng])).map(([a, b]) => L.latLng(a, b));
+
+// ---------- Dibujo en el mapa ----------
+const DRAW = { parcela: { btn: 'bParcela', color: '#9ccc65' }, muro: { btn: 'bMuro', color: '#ffb300' } };
+let mode = null, pts = [], temp = null, lastClick = 0, borrando = false;
+function startDraw(kind) {
+  cancelDraw(); setBorrar(false); mode = kind;
+  map.doubleClickZoom.disable(); map.getContainer().style.cursor = 'crosshair';
+  $(DRAW[kind].btn).classList.add('on');
+  status(kind === 'parcela' ? 'Clic para añadir vértices; doble clic o clic en el primero para cerrar. Esc cancela.'
+    : 'Clic a lo largo del borde del muro (la curva se suaviza sola). Doble clic o Enter para terminar. Esc cancela.');
+}
+function cancelDraw() {
+  if (temp) map.removeLayer(temp); temp = null; mode = null; pts = [];
+  map.doubleClickZoom.enable(); map.getContainer().style.cursor = '';
+  Object.values(DRAW).forEach(d => $(d.btn).classList.remove('on'));
+}
+function finishDraw() {
+  const kind = mode, ll = pts.slice(); cancelDraw();
+  if (kind === 'parcela' && ll.length >= 3) {
+    parcelaLayer.clearLayers(); murosLayer.clearLayers();
+    parcelaLayer.addLayer(L.polygon(ll, { color: DRAW.parcela.color, weight: 3, fillOpacity: .04 }));
+    status(`Terreno dibujado: ${fmt(areaUTM(ll.map(toUTM)))} m². Pulsa «Generar plano».`);
+  } else if (kind === 'muro' && ll.length >= 2) {
+    addMuro(ll);
+    startDraw('muro');                              // seguir dibujando muros seguidos
+  }
+}
+map.on('click', e => {
+  if (!mode) return;
+  const now = Date.now(), dbl = now - lastClick < 350 && pts.length && map.latLngToContainerPoint(pts[pts.length - 1]).distanceTo(e.containerPoint) < 8;
+  lastClick = now;
+  if (dbl) return finishDraw();
+  if (mode === 'parcela' && pts.length >= 3 && map.latLngToContainerPoint(pts[0]).distanceTo(e.containerPoint) < 12) return finishDraw();
+  pts.push(e.latlng);
+  if (temp) map.removeLayer(temp);
+  const c = DRAW[mode].color;
+  temp = mode === 'parcela' && pts.length >= 3 ? L.polygon(pts, { color: c, dashArray: '5 5', fillOpacity: .05 }).addTo(map)
+    : L.polyline(mode === 'muro' ? llCurve(pts) : pts, { color: c, weight: 4, dashArray: '6 6' }).addTo(map);
+});
+map.on('dblclick', () => { if (mode) finishDraw(); });
+$('bParcela').onclick = () => mode === 'parcela' ? finishDraw() : startDraw('parcela');
+$('bMuro').onclick = () => mode === 'muro' ? (pts.length >= 2 ? finishDraw() : cancelDraw()) : startDraw('muro');
+function setBorrar(on) {
+  borrando = on; $('bBorrar').classList.toggle('on', on);
+  if (on) { cancelDraw(); status('Clic sobre un muro del mapa para borrarlo. Vuelve a pulsar «Borrar muro» para salir.'); }
+}
+$('bBorrar').onclick = () => setBorrar(!borrando);
+
+// ---------- Detección automática (visión por computador en server.py) ----------
+$('bDetectar').onclick = async () => {
+  if (!G) return;
+  cancelDraw(); setBorrar(false);
+  const xs = G.P.map(p => p[0]), ys = G.P.map(p => p[1]);
+  const bbox = [Math.min(...xs) - 5, Math.min(...ys) - 5, Math.max(...xs) + 5, Math.max(...ys) + 5];
+  const btn = $('bDetectar'); btn.disabled = true;
+  status('Detectando bancales en la ortofoto… (10–30 s según el tamaño)');
+  try {
+    const r = await fetch('/api/detectar', { method: 'POST', body: JSON.stringify({ bbox, poly: G.P }) });
+    const js = await r.json();
+    if (!r.ok) throw new Error(js.error || `HTTP ${r.status}`);
+    G.lastAuto = js.muros;                            // se guarda tal cual para medir cuánto hubo que corregir
+    pushUndo();
+    G.muros = G.muros.filter(m => !m.auto);          // sustituye una detección anterior, conserva los muros manuales
+    for (const m of js.muros) {
+      const ll = m.pts.map(([x, y]) => { const [lng, lat] = proj4('EPSG:25830', 'EPSG:4326', [x, y]); return L.latLng(lat, lng); });
+      G.muros.push({ ll, auto: true, conf: m.conf });
+    }
+    rebuild();
+    const dud = js.muros.filter(m => m.conf < .7).length;
+    status(`${js.muros.length} muros detectados en ${String(js.segundos).replace('.', ',')} s → ${G.regions.length} bancales.` +
+      (dud ? ` ${dud} dudosos (amarillo, discontinuo).` : '') + ' Revisa: «Borrar muro» para quitar, «Dibujar muro» para añadir, Ctrl+Z para deshacer todo.');
+  } catch (e) { status('Error en la detección: ' + e.message); }
+  btn.disabled = false;
+};
+
+// ---------- Guardar como ejemplo (Fase 1: datos para entrenar y evaluar) ----------
+const dlg = $('dlgEjemplo');
+$('bEjemplo').onclick = () => {
+  if (!G) return;
+  cancelDraw(); setBorrar(false);
+  $('eRevisado').checked = false; $('eNotas').value = '';
+  dlg.hidden = false;
+};
+$('eCancelar').onclick = () => dlg.hidden = true;
+$('eGuardar').onclick = async () => {
+  if (!$('eRevisado').checked) return status('Marca la casilla de «He revisado todos los muros» antes de guardar.');
+  const cultivo = $('eCultivo').value;
+  if (!G.muros.length && cultivo !== 'invernadero_llano' && !confirm('No hay ningún muro. ¿Guardar igualmente como parcela SIN bancales?')) return;
+  const xs = G.P.map(p => p[0]), ys = G.P.map(p => p[1]);
+  const bbox = [Math.min(...xs) - 5, Math.min(...ys) - 5, Math.max(...xs) + 5, Math.max(...ys) + 5];
+  // los muros se guardan como la curva suavizada que usa el gemelo (lo que ve el usuario)
+  const muros = G.muros.map(m => ({ pts: catmull(m.ll.map(toUTM), 16), origen: m.auto ? 'auto' : 'manual' }));
+  const body = { bbox, poly: G.P, muros, muros_auto: G.lastAuto || null,
+    meta: { cultivo, arboles_por_bancal: $('eArboles').value, dificultad: $('eDificultad').value, notas: $('eNotas').value.trim(),
+            criterio_muro: 'borde_superior_talud', n_bancales_editor: G.regions.length } };
+  $('eGuardar').disabled = true; status('Guardando ejemplo (descargando ortofoto y relieve a máxima resolución)…');
+  try {
+    const r = await fetch('/api/ejemplo', { method: 'POST', body: JSON.stringify(body) });
+    const js = await r.json();
+    if (!r.ok) throw new Error(js.error || `HTTP ${r.status}`);
+    dlg.hidden = true;
+    status(`Ejemplo guardado: ${js.id} (${js.split === 'test' ? 'reservado para test' : 'para ajustar/entrenar'}). Total en el dataset: ${js.total}.`);
+  } catch (e) { status('Error guardando el ejemplo: ' + e.message); }
+  $('eGuardar').disabled = false;
+};
+
+// =====================================================================================
+// MODELO: plano llano + muros dibujados → regiones (bancales) → alturas
+//   altura automática: escalón de «Altura de muro» entre vecinos; el relieve real (MDT) solo decide qué lado es el alto
+//   altura manual: lo que el usuario fija (arrastrando o escribiendo) manda sobre la automática
+// =====================================================================================
+let G = null;
+
+function addMuro(ll) {
+  if (!G) return status('Primero genera el plano.');
+  pushUndo();
+  G.muros.push({ ll: ll.map(p => L.latLng(p.lat, p.lng)) });
+  rebuild();
+  const n = G.regions.length;
+  status(`${G.muros.length} muro(s) · ${n} bancal(es).` + (G.lastWallUseless ? ' ⚠ El último muro no separa nada: llévalo de borde a borde o hasta otro muro.' : ''));
+}
+function drawMurosOnMap() {
+  murosLayer.clearLayers();
+  G.muros.forEach((m, k) => {
+    const dudoso = m.auto && m.conf < .7;
+    const pl = L.polyline(llCurve(m.ll), { color: dudoso ? '#ffee58' : DRAW.muro.color, weight: m.auto ? 3 : 4, dashArray: dudoso ? '6 5' : null }).addTo(murosLayer);
+    if (m.auto) pl.bindTooltip(`Detectado automáticamente · confianza ${Math.round(m.conf * 100)} %`, { sticky: true });
+    pl.on('click', ev => {
+      if (!borrando) return;
+      L.DomEvent.stop(ev);
+      pushUndo(); G.muros.splice(k, 1); rebuild(); status('Muro borrado.');
+    });
+  });
+}
+
+function rebuild() {
+  const { nx, ny, res, x0, y1, mask, raw } = G, N = nx * ny;
+  // 1) rasterizar muros (curva suavizada, prolongada 1,5 m en cada extremo para que "enganche" con bordes y otros muros)
+  const barrier = new Uint8Array(N);
+  const before = G.regions ? G.regions.length : 1;
+  for (const m of G.muros) {
+    const P = catmull(m.ll.map(toUTM), 16);
+    const ext = (a, b) => { const dx = a[0] - b[0], dy = a[1] - b[1], L0 = Math.hypot(dx, dy) || 1; return [a[0] + dx / L0 * 1.5, a[1] + dy / L0 * 1.5]; };
+    if (P.length >= 2) { P.unshift(ext(P[0], P[1])); P.push(ext(P[P.length - 1], P[P.length - 2])); }
+    for (let k = 0; k < P.length - 1; k++) {
+      const [ax, ay] = P[k], [bx, by] = P[k + 1], n = Math.ceil(Math.hypot(bx - ax, by - ay) / (res * .3)) + 1;
+      for (let s = 0; s <= n; s++) {
+        const c = Math.round((ax + (bx - ax) * s / n - x0) / res), r = Math.round((y1 - (ay + (by - ay) * s / n)) / res);
+        if (c >= 0 && r >= 0 && c < nx && r < ny) barrier[r * nx + c] = 1;
+      }
+    }
+  }
+  // 2) regiones = trozos del terreno separados por muros
+  const label = new Int32Array(N).fill(-1), regions = [];
+  for (let s0 = 0; s0 < N; s0++) {
+    if (!mask[s0] || barrier[s0] || label[s0] >= 0) continue;
+    const id = regions.length, cells = [s0]; label[s0] = id; let sum = 0;
+    for (let q = 0; q < cells.length; q++) { const i = cells[q], c = i % nx, r = (i / nx) | 0; sum += raw[i];
+      for (const [dc, dr] of N4) { const cc = c + dc, rr = r + dr; if (cc < 0 || rr < 0 || cc >= nx || rr >= ny) continue;
+        const j = rr * nx + cc; if (mask[j] && !barrier[j] && label[j] < 0) { label[j] = id; cells.push(j); } } }
+    regions.push({ cells, mean: sum / cells.length, h: 0 });
+  }
+  // trozos diminutos (< 3 m²) → se tratan como parte del muro
+  const minCells = Math.ceil(3 / (res * res));
+  for (const R of regions) if (R.cells.length < minCells) for (const i of R.cells) { barrier[i] = 1; label[i] = -1; }
+  const keep = regions.filter(R => R.cells.length >= minCells), remap = new Map();
+  keep.forEach((R, k) => remap.set(regions.indexOf(R), k));
+  for (let i = 0; i < N; i++) if (label[i] >= 0) label[i] = remap.has(label[i]) ? remap.get(label[i]) : -1;
+  // 3) vecindad a través de los muros
+  const adj = keep.map(() => new Set());
+  for (let i = 0; i < N; i++) if (barrier[i] && mask[i]) {
+    const c = i % nx, r = (i / nx) | 0, ls = new Set();
+    for (let dr = -2; dr <= 2; dr++) for (let dc = -2; dc <= 2; dc++) { const cc = c + dc, rr = r + dr; if (cc >= 0 && rr >= 0 && cc < nx && rr < ny && label[rr * nx + cc] >= 0) ls.add(label[rr * nx + cc]); }
+    for (const a of ls) for (const b of ls) if (a !== b) adj[a].add(b);
+  }
+  // 4) alturas automáticas: escalones desde el bancal más bajo (según el relieve real)
+  const step = +$('muro').value, done = new Uint8Array(keep.length);
+  const order = keep.map((R, k) => k).sort((a, b) => keep[a].mean - keep[b].mean);
+  for (const root of order) {
+    if (done[root]) continue;
+    keep[root].h = 0; done[root] = 1; const q = [root];
+    while (q.length) { const a = q.shift();
+      for (const b of adj[a]) if (!done[b]) { keep[b].h = keep[a].h + step * (keep[b].mean >= keep[a].mean ? 1 : -1); done[b] = 1; q.push(b); } }
+  }
+  const hMin = Math.min(0, ...keep.map(R => R.h)); keep.forEach(R => R.h -= hMin);
+  // 5) alturas fijadas a mano (guardadas por una celda "semilla" de cada bancal)
+  for (const R of keep) R.manual = false;
+  for (const [cell, h] of G.manualH) { const l = label[cell]; if (l >= 0) { keep[l].h = h; keep[l].manual = true; } }
+  // 6) superficie final: plataformas planas, muros verticales (la celda de muro toma la altura del bancal más alto que toca)
+  const z = new Float32Array(N), base = keep.length ? Math.min(...keep.map(R => R.h)) : 0;
+  for (let i = 0; i < N; i++) z[i] = label[i] >= 0 ? keep[label[i]].h : base;
+  for (let i = 0; i < N; i++) if (barrier[i] && mask[i]) {
+    const c = i % nx, r = (i / nx) | 0; let best = -Infinity;
+    for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) { const cc = c + dc, rr = r + dr; if (cc >= 0 && rr >= 0 && cc < nx && rr < ny) { const l = label[rr * nx + cc]; if (l >= 0) best = Math.max(best, keep[l].h); } }
+    if (best > -Infinity) z[i] = best;
+  }
+  G.lastWallUseless = G.muros.length > 0 && keep.length <= before;
+  let zmax = 0; for (let i = 0; i < N; i++) if (z[i] > zmax) zmax = z[i];
+  Object.assign(G, { barrier, label, regions: keep, z, zmax });
+  if (G.sel !== null && G.sel >= keep.length) G.sel = null;
+  drawMurosOnMap(); updateMesh(); infoText(); editPanel();
+  $('bDeshacer').disabled = !G.undo.length;
+}
+
+// fijar la altura de un bancal (y opcionalmente desplazar igual todos los que están por encima)
+function setRegionHeight(l, h, conArriba) {
+  const R = G.regions[l], d = h - R.h;
+  const afectados = conArriba ? G.regions.map((Q, k) => k).filter(k => k === l || G.regions[k].h > R.h + 1e-6) : [l];
+  for (const k of afectados) {
+    const Q = G.regions[k];
+    for (const cell of [...G.manualH.keys()]) if (G.label[cell] === k) G.manualH.delete(cell);
+    G.manualH.set(Q.cells[Q.cells.length >> 1], Q.h + d);
+  }
+}
+
+// ---------- Deshacer ----------
+function pushUndo() {
+  G.undo.push({ muros: G.muros.map(m => ({ ...m, ll: m.ll.slice() })), manualH: new Map(G.manualH) });
+  if (G.undo.length > 50) G.undo.shift();
+  $('bDeshacer').disabled = false;
+}
+function undo() {
+  const s = G && G.undo.pop(); if (!s) return;
+  G.muros = s.muros; G.manualH = s.manualH; G.sel = null; rebuild(); status('Deshecho.');
+}
+$('bDeshacer').onclick = undo;
+addEventListener('keydown', e => {
+  if (mode) { if (e.key === 'Enter') finishDraw(); if (e.key === 'Escape') { cancelDraw(); status('Dibujo terminado.'); } return; }
+  if (e.target.tagName === 'INPUT' && e.target.type === 'number') return;
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); undo(); }
+});
+$('muro').oninput = e => { $('muroV').textContent = (+e.target.value).toString().replace('.', ',') + ' m'; if (G) rebuild(); };
+
+// =====================================================================================
+// VISTA 3D
+// =====================================================================================
+const view = $('view'), info = $('info'), edit = $('edit'), tip = $('tip');
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(devicePixelRatio); view.insertBefore(renderer.domElement, view.firstChild);
+const scene = new THREE.Scene(); scene.background = new THREE.Color(0xa9c9e8);
+const camera = new THREE.PerspectiveCamera(45, 1, .5, 20000);
+const controls = new OrbitControls(camera, renderer.domElement); controls.enableDamping = true;
+scene.add(new THREE.HemisphereLight(0xffffff, 0x556b2f, 1.1));
+const sun = new THREE.DirectionalLight(0xfff2d6, 1.6); sun.position.set(-300, 500, 300); scene.add(sun);
+function resize() { const w = view.clientWidth, h = view.clientHeight; renderer.setSize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix(); }
+addEventListener('resize', resize); resize();
+(function loop() { requestAnimationFrame(loop); controls.update(); renderer.render(scene, camera); })();
+
+let mesh = null, showGemelo = true, useOrtho = true, orthoTex = null, idxMap = null, gridCol = null;
+const curZ = () => showGemelo ? G.z : G.rawRel;
+
+function buildMesh() {
+  if (mesh) { scene.remove(mesh); mesh.geometry.dispose(); mesh.material.dispose(); }
+  const { nx, ny, res } = G;
+  let geo = new THREE.PlaneGeometry((nx - 1) * res, (ny - 1) * res, nx - 1, ny - 1).rotateX(-Math.PI / 2);
+  idxMap = null;
+  if (!useOrtho) { idxMap = geo.index.array.slice(); geo = geo.toNonIndexed(); }
+  geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(geo.attributes.position.count * 3), 3));
+  gridCol = new Float32Array(nx * ny * 3);
+  mesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: !useOrtho, map: useOrtho ? orthoTex : null }));
+  scene.add(mesh); updateMesh();
+}
+function updateMesh() {
+  if (!mesh) return;
+  const { nx, ny, res, mask } = G, Z = curZ(), ex = +$('exag').value, sel = showGemelo ? G.sel : null;
+  for (let r = 0; r < ny; r++) for (let c = 0; c < nx; c++) {
+    const i = r * nx + c; let R, Gc, B;
+    if (useOrtho) { R = Gc = B = 1; }
+    else {
+      const h = Z[i]; let g = 0;
+      if (c > 0) g = Math.max(g, Math.abs(Z[i - 1] - h)); if (c < nx - 1) g = Math.max(g, Math.abs(Z[i + 1] - h));
+      if (r > 0) g = Math.max(g, Math.abs(Z[i - nx] - h)); if (r < ny - 1) g = Math.max(g, Math.abs(Z[i + nx] - h));
+      g /= res;
+      if (g < .35) [R, Gc, B] = [.47, .62, .30]; else if (g < 1) [R, Gc, B] = [.62, .52, .36]; else [R, Gc, B] = [.66, .64, .6];
+    }
+    if (showGemelo && G.barrier[i] && mask[i] && !useOrtho) [R, Gc, B] = [.66, .64, .6];
+    if (sel !== null && G.label[i] === sel) { R = R * .55 + .45; Gc = Gc * .55 + .38; B *= .3; }
+    const k = mask[i] ? 1 : .38;
+    gridCol[i * 3] = R * k; gridCol[i * 3 + 1] = Gc * k; gridCol[i * 3 + 2] = B * k;
+  }
+  const pos = mesh.geometry.attributes.position, col = mesh.geometry.attributes.color;
+  if (idxMap) {
+    for (let k = 0; k < idxMap.length; k++) { const i = idxMap[k]; pos.array[k * 3 + 1] = Z[i] * ex; col.array.set(gridCol.subarray(i * 3, i * 3 + 3), k * 3); }
+  } else {
+    for (let i = 0; i < nx * ny; i++) pos.array[i * 3 + 1] = Z[i] * ex;
+    col.array.set(gridCol); mesh.geometry.computeVertexNormals();
+  }
+  pos.needsUpdate = true; col.needsUpdate = true; mesh.geometry.computeBoundingSphere();
+}
+
+// intersección rayo–terreno sobre la rejilla
+const ray = new THREE.Raycaster();
+function heightAtWorld(x, z) {
+  const { nx, ny, res } = G, W = (nx - 1) * res, H = (ny - 1) * res, Z = curZ();
+  const c = (x + W / 2) / res, r = (z + H / 2) / res;
+  if (c < 0 || r < 0 || c > nx - 1 || r > ny - 1) return null;
+  const c0 = Math.min(nx - 2, c | 0), r0 = Math.min(ny - 2, r | 0), fc = c - c0, fr = r - r0;
+  return ((Z[r0 * nx + c0] * (1 - fc) + Z[r0 * nx + c0 + 1] * fc) * (1 - fr) + (Z[(r0 + 1) * nx + c0] * (1 - fc) + Z[(r0 + 1) * nx + c0 + 1] * fc) * fr) * +$('exag').value;
+}
+function hitTerrain(e) {
+  if (!G || !mesh) return null;
+  const rect = renderer.domElement.getBoundingClientRect();
+  ray.setFromCamera(new THREE.Vector2((e.clientX - rect.left) / rect.width * 2 - 1, -(e.clientY - rect.top) / rect.height * 2 + 1), camera);
+  const o = ray.ray.origin, d = ray.ray.direction, W = (G.nx - 1) * G.res / 2, H = (G.ny - 1) * G.res / 2;
+  const ymax = (Math.max(G.zmax || 0, G.hmax - G.hmin) + 5) * +$('exag').value + 5;
+  let t0 = 0, t1 = 1e5;
+  for (const [oo, dd, lo, hi] of [[o.x, d.x, -W, W], [o.y, d.y, -5, ymax], [o.z, d.z, -H, H]]) {
+    if (Math.abs(dd) < 1e-9) { if (oo < lo || oo > hi) return null; continue; }
+    let a = (lo - oo) / dd, b = (hi - oo) / dd; if (a > b) [a, b] = [b, a];
+    t0 = Math.max(t0, a); t1 = Math.min(t1, b);
+  }
+  if (t0 > t1) return null;
+  let prev = t0;
+  for (let t = t0; t <= t1; t += G.res * .5) {
+    const y = o.y + d.y * t, h = heightAtWorld(o.x + d.x * t, o.z + d.z * t);
+    if (h !== null && y <= h) {
+      let a = prev, b = t;
+      for (let k = 0; k < 10; k++) { const m = (a + b) / 2, hm = heightAtWorld(o.x + d.x * m, o.z + d.z * m); if (hm !== null && o.y + d.y * m <= hm) b = m; else a = m; }
+      const c = Math.round((o.x + d.x * b + W) / G.res), r = Math.round((o.z + d.z * b + H) / G.res);
+      return { c, r, i: r * G.nx + c };
+    }
+    prev = t;
+  }
+  return null;
+}
+
+// ---------- Selección y arrastre de bancales en el 3D ----------
+let drag = null, downPos = null;
+const el = renderer.domElement;
+el.addEventListener('pointerdown', e => {
+  downPos = [e.clientX, e.clientY];
+  if (e.button !== 0 || !G || !showGemelo) return;
+  const hit = hitTerrain(e); if (!hit) return;
+  const l = G.label[hit.i]; if (l === undefined || l < 0) return;
+  drag = { l, y0: e.clientY, h0: G.regions[l].h, moved: false, undoPushed: false };
+  G.sel = l; controls.enabled = false; updateMesh(); editPanel();
+  el.setPointerCapture(e.pointerId);
+});
+el.addEventListener('pointermove', e => {
+  if (!drag) return;
+  const d = Math.round((drag.y0 - e.clientY) / 5) * .1;    // 5 px = 10 cm
+  if (d === 0 && !drag.moved) return;
+  if (!drag.undoPushed) { pushUndo(); drag.undoPushed = true; }
+  drag.moved = true;
+  const target = Math.round((drag.h0 + d) * 100) / 100;
+  if (Math.abs(target - G.regions[drag.l].h) > 1e-6) { setRegionHeight(drag.l, target, $('conArriba') ? $('conArriba').checked : true); rebuild(); }
+  tip.hidden = false; tip.style.left = (e.offsetX + 14) + 'px'; tip.style.top = (e.offsetY - 10) + 'px';
+  tip.textContent = `${fm(target)} m (${d >= 0 ? '+' : ''}${fm(d)})`;
+});
+el.addEventListener('pointerup', e => {
+  const clickLike = downPos && Math.hypot(e.clientX - downPos[0], e.clientY - downPos[1]) < 4;
+  if (drag) { drag = null; tip.hidden = true; controls.enabled = true; editPanel(); return; }
+  if (clickLike && G && G.sel !== null) { G.sel = null; updateMesh(); editPanel(); }
+});
+
+// ---------- Paneles ----------
+function infoText() {
+  const { area, hmin, hmax, mdtRes, regions, res } = G;
+  const hs = regions.map(R => R.h), span = hs.length ? Math.max(...hs) - Math.min(...hs) : 0;
+  info.innerHTML = `<b>Terreno propio</b>: ${fmt(area)} m² (${(area / 1e4).toFixed(2).replace('.', ',')} ha)<br>` +
+    `<b>${regions.length} bancal(es)</b> · ${G.muros.length} muro(s) · desnivel total ${fm(span)} m<br>` +
+    `<span style="color:#90a4ae">Relieve real (MDT IGN ${mdtRes} m): ${fm(hmax - hmin)} m de desnivel — solo se usa para saber qué lado de cada muro es el alto.</span>`;
+}
+let conArribaPref = true;
+function editPanel() {
+  if (!G || G.sel === null || !G.regions[G.sel]) { edit.hidden = true; return; }
+  const l = G.sel, R = G.regions[l];
+  edit.hidden = false;
+  edit.innerHTML = `<b>Bancal</b> ${R.manual ? '<span style="color:#ffe082">(ajustado a mano)</span>' : '<span style="color:#90a4ae">(automático)</span>'}<br>
+    Superficie: ${fmt(R.cells.length * G.res * G.res)} m²<br>
+    Altura: <input id="eH" type="number" step="0.05" value="${R.h.toFixed(2)}"> m<br>
+    <button id="eDn" class="sec">−10 cm</button><button id="eUp" class="sec">+10 cm</button><br>
+    <label><input id="conArriba" type="checkbox" ${conArribaPref ? 'checked' : ''}> Mover también los bancales de arriba</label>
+    <button id="eAuto" class="sec">Volver a automático</button>`;
+  const apply = h => { if (!isFinite(h)) return; pushUndo(); setRegionHeight(l, Math.round(h * 100) / 100, $('conArriba').checked); rebuild(); };
+  $('eH').onchange = e => apply(parseFloat(e.target.value.replace(',', '.')));
+  $('eH').onkeydown = e => { if (e.key === 'Enter') e.target.blur(); };
+  $('eUp').onclick = () => apply(R.h + .1);
+  $('eDn').onclick = () => apply(R.h - .1);
+  $('conArriba').onchange = e => conArribaPref = e.target.checked;
+  $('eAuto').onclick = () => { pushUndo(); for (const cell of [...G.manualH.keys()]) if (G.label[cell] === l) G.manualH.delete(cell); rebuild(); };
+}
+
+// ---------- Datos del IGN (a través del proxy local: server.py) ----------
+async function fetchRetry(url, tries = 3, ms = 30000) {
+  let last;
+  for (let t = 0; t < tries; t++) {
+    const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), ms);
+    try { const r = await fetch(url, { signal: ctl.signal }); if (!r.ok) throw new Error(`HTTP ${r.status}`); return r; }
+    catch (e) { last = e.name === 'AbortError' ? new Error('tiempo de espera agotado') : e; }
+    finally { clearTimeout(timer); }
+    await new Promise(res => setTimeout(res, 800 * (t + 1)));
+  }
+  throw last;
+}
+async function fetchMDT(x0, y0, x1, y1) {
+  const url = `/proxy/mdt-wcs?SERVICE=WCS&VERSION=2.0.1&REQUEST=GetCoverage&CoverageId=Elevacion25830_5&SUBSET=x(${x0},${x1})&SUBSET=y(${y0},${y1})&FORMAT=application/asc`;
+  let txt;
+  try { txt = await (await fetchRetry(url)).text(); } catch (e) { throw new Error(`relieve MDT (${e.message || 'sin conexión'})`); }
+  if (txt.indexOf('ncols') < 0) throw new Error(`relieve MDT (${(txt.match(/<ows:ExceptionText>([^<]*)/) || [])[1] || 'respuesta inesperada'})`);
+  const tok = txt.slice(txt.indexOf('ncols')).split(/\s+/), hdr = {}; let i = 0;
+  while (/[a-z]/i.test(tok[i]) && !isNaN(parseFloat(tok[i + 1]))) { hdr[tok[i].toLowerCase()] = parseFloat(tok[i + 1]); i += 2; }
+  const n = hdr.ncols * hdr.nrows, z = new Float32Array(n);
+  for (let k = 0; k < n; k++) z[k] = parseFloat(tok[i + k]);
+  return { ...hdr, z };
+}
+function sampler(m) {
+  const top = m.yllcorner + m.nrows * m.cellsize;
+  return (x, y) => {
+    let c = (x - m.xllcorner) / m.cellsize - .5, r = (top - y) / m.cellsize - .5;
+    c = Math.max(0, Math.min(m.ncols - 1.001, c)); r = Math.max(0, Math.min(m.nrows - 1.001, r));
+    const c0 = c | 0, r0 = r | 0, fc = c - c0, fr = r - r0, Z = m.z, W = m.ncols;
+    return (Z[r0 * W + c0] * (1 - fc) + Z[r0 * W + c0 + 1] * fc) * (1 - fr) + (Z[(r0 + 1) * W + c0] * (1 - fc) + Z[(r0 + 1) * W + c0 + 1] * fc) * fr;
+  };
+}
+async function loadOrtho(x0, y0, x1, y1) {
+  const W = x1 - x0, H = y1 - y0;
+  for (const max of [4096, 2048, 1024]) {
+    const px = Math.min(max, Math.round(Math.max(W, H) * 6));
+    const url = `/api/ortho?bbox=${x0},${y0},${x1},${y1}&w=${Math.round(px * W / Math.max(W, H))}&h=${Math.round(px * H / Math.max(W, H))}`;
+    try {
+      const blob = await (await fetchRetry(url, 1, 90000)).blob();
+      if (!blob.type.startsWith('image/')) throw new Error('no es una imagen');
+      const u = URL.createObjectURL(blob), tex = await new THREE.TextureLoader().loadAsync(u);
+      URL.revokeObjectURL(u); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 8;
+      return tex;
+    } catch (e) { console.warn(`Ortofoto ${max}px falló:`, e); }
+  }
+  return null;
+}
+
+// ---------- Generar el plano ----------
+$('bGenerar').onclick = async () => {
+  if (mode) finishDraw();
+  const poly = parcelaLayer.getLayers()[0];
+  if (!poly) return status('Primero dibuja tu terreno.');
+  const P = poly.getLatLngs()[0].map(toUTM);
+  const xs = P.map(p => p[0]), ys = P.map(p => p[1]), pad = 10;
+  const x0 = Math.floor((Math.min(...xs) - pad) / 5) * 5, x1 = Math.ceil((Math.max(...xs) + pad) / 5) * 5;
+  const y0 = Math.floor((Math.min(...ys) - pad) / 5) * 5, y1 = Math.ceil((Math.max(...ys) + pad) / 5) * 5;
+  if (x1 - x0 > 1500 || y1 - y0 > 1500) return status('Terreno demasiado grande para la demo (máx. ~1,5 km).');
+  status('Descargando ortofoto PNOA y relieve (MDT IGN)…');
+  try {
+    const W = x1 - x0, H = y1 - y0;
+    const [mdt, tex] = await Promise.all([fetchMDT(x0, y0, x1, y1), loadOrtho(x0, y0, x1, y1)]);
+    orthoTex = tex; useOrtho = !!tex; $('bTex').textContent = useOrtho ? 'Textura: ortofoto' : 'Textura: low-poly';
+    const span = Math.max(W, H), res = span <= 300 ? .5 : span <= 800 ? 1 : 2;   // rejilla fina = muros precisos
+    const nx = Math.round(W / res) + 1, ny = Math.round(H / res) + 1;
+    const s = sampler(mdt), raw = new Float32Array(nx * ny), mask = new Uint8Array(nx * ny);
+    let hmin = Infinity, hmax = -Infinity;
+    for (let r = 0; r < ny; r++) for (let c = 0; c < nx; c++) {
+      const x = x0 + c * res, y = y1 - r * res, i = r * nx + c;
+      raw[i] = s(x, y); mask[i] = inside(x, y, P) ? 1 : 0;
+      if (mask[i]) { hmin = Math.min(hmin, raw[i]); hmax = Math.max(hmax, raw[i]); }
+    }
+    const rawRel = raw.map(v => v - hmin);
+    G = { nx, ny, res, x0, y1, raw, rawRel, mask, hmin, hmax, area: areaUTM(P), mdtRes: mdt.cellsize, P,
+          muros: [], manualH: new Map(), undo: [], sel: null, regions: null };
+    murosLayer.clearLayers();
+    ['bModo', 'bTex', 'bMuro', 'bBorrar', 'bDetectar', 'bEjemplo'].forEach(id => $(id).disabled = false);
+    $('help').hidden = false;
+    showGemelo = true; $('bModo').textContent = 'Ver: gemelo';
+    G.regions = null; buildMeshAfter();
+    controls.target.set(0, 0, 0);
+    camera.position.set(0, span * 1.1, span * .45);                 // casi cenital: se ve la ortofoto como en el mapa
+    status(`Plano generado (rejilla de ${String(res).replace('.', ',')} m). Pulsa «Dibujar muro» y traza los muros sobre la ortofoto del mapa.`);
+  } catch (err) { console.error(err); status('Error descargando datos del IGN: ' + (err && err.message ? err.message : 'fallo de red') + '. Vuelve a pulsar «Generar plano».'); }
+};
+function buildMeshAfter() {
+  // primera construcción: rebuild() necesita la malla para actualizarla
+  G.barrier = new Uint8Array(G.nx * G.ny); G.label = new Int32Array(G.nx * G.ny).fill(-1); G.z = new Float32Array(G.nx * G.ny);
+  buildMesh(); rebuild();
+}
+$('bModo').onclick = e => { showGemelo = !showGemelo; e.target.textContent = showGemelo ? 'Ver: gemelo' : 'Ver: relieve real (MDT)'; updateMesh(); };
+$('bTex').onclick = e => {
+  if (!orthoTex) return status('No hay ortofoto descargada; vuelve a generar el plano.');
+  useOrtho = !useOrtho; e.target.textContent = useOrtho ? 'Textura: ortofoto' : 'Textura: low-poly'; buildMesh();
+};
+$('exag').oninput = e => { $('exagV').textContent = e.target.value + '×'; if (G) updateMesh(); };
+</script>
+</body>
+</html>

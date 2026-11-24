@@ -1,0 +1,170 @@
+{
+  "post": {
+    "umbral_prob": 0.3,
+    "blur_m": 5.0,
+    "nms_m": 2.5,
+    "min_len_m": 6.0,
+    "sep_min_m": 0.0,
+    "align_min": 0.85,
+    "ext_conf_min": 0.7
+  },
+  "f1_loo_ajuste": 0.317,
+  "f1_test": 0.251,
+  "n_ajuste": 4,
+  "n_test": 1,
+  "fecha": "2026-11-23 14:27",
+  "importancia": [
+    [
+      "pendiente",
+      0.0952
+    ],
+    [
+      "oscura_s8",
+      0.0671
+    ],
+    [
+      "clara_s8",
+      0.0534
+    ],
+    [
+      "saturacion",
+      0.0466
+    ],
+    [
+      "oscura_s6_continuo",
+      0.0444
+    ],
+    [
+      "oscura_s6",
+      0.0443
+    ],
+    [
+      "densidad_copas",
+      0.0366
+    ],
+    [
+      "L_s8",
+      0.0365
+    ],
+    [
+      "dL_arriba_s4",
+      0.0342
+    ],
+    [
+      "L_abajo_4m",
+      0.0331
+    ],
+    [
+      "textura_s8",
+      0.0328
+    ],
+    [
+      "L_abajo_2m",
+      0.0292
+    ],
+    [
+      "textura_s4",
+      0.0264
+    ],
+    [
+      "crom_r",
+      0.0262
+    ],
+    [
+      "clara_s6",
+      0.0245
+    ],
+    [
+      "verdor",
+      0.0243
+    ],
+    [
+      "crom_g",
+      0.0237
+    ],
+    [
+      "L_arriba_4m",
+      0.0226
+    ],
+    [
+      "anisotropia_s8",
+      0.0223
+    ],
+    [
+      "L_arriba_2m",
+      0.0221
+    ],
+    [
+      "L_arriba_1m",
+      0.0218
+    ],
+    [
+      "copas",
+      0.0213
+    ],
+    [
+      "L_s3",
+      0.0207
+    ],
+    [
+      "L_abajo_1m",
+      0.0205
+    ],
+    [
+      "oscura_s4",
+      0.0185
+    ],
+    [
+      "clara_s4",
+      0.0176
+    ],
+    [
+      "clara_s2.5",
+      0.0176
+    ],
+    [
+      "anisotropia_s6",
+      0.0151
+    ],
+    [
+      "textura_s2",
+      0.0137
+    ],
+    [
+      "L_s1",
+      0.0134
+    ],
+    [
+      "oscura_s2.5",
+      0.0133
+    ],
+    [
+      "clara_s2.5_continuo",
+      0.013
+    ],
+    [
+      "clara_s1.5",
+      0.0126
+    ],
+    [
+      "dL_arriba_s2",
+      0.0111
+    ],
+    [
+      "oscura_s1.5",
+      0.0102
+    ],
+    [
+      "anisotropia_s4",
+      0.0081
+    ],
+    [
+      "anisotropia_s2.5",
+      0.0041
+    ],
+    [
+      "anisotropia_s1.5",
+      0.002
+    ]
+  ]
+}
