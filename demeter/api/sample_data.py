@@ -14,6 +14,7 @@ from typing import Optional
 from demeter.api import schemas as s
 from demeter.api.geo import offset, polygon_area_m2, rectangle
 from demeter.services.forecast import predict_sensor
+from demeter.services.irrigation import recommend
 
 # Centro de la «Finca La Costa» (Carchuna, Motril) y de la «Huerta del Río».
 _LAT1, _LON1 = 36.7174, -3.4301
@@ -292,46 +293,13 @@ def prediction(sensor: s.Sensor) -> Optional[s.SensorPrediction]:
 
 
 def irrigation(parcel_id: int) -> s.IrrigationAdvice:
-    """Consejo de riego de EJEMPLO con una regla simple. El algoritmo real es el de E5 (#7)."""
-    now = utc_now()
-    w, wx = water(parcel_id), weather(parcel_id)
-    soil = [x for x in parcel_sensors(parcel_id) if x.type == "humedad_suelo"]
-    values = [r.value for r in (last_reading(x) for x in soil) if r is not None]
-    soil_pct = round(sum(values) / len(values), 1) if values else None
-    low = min((x.threshold_low for x in soil if x.threshold_low is not None), default=None)
-    rain_mm = round(sum(f.rain_mm for f in wx.forecast), 1)
-    factors = s.IrrigationFactors(
-        soil_moisture_pct=soil_pct,
-        rain_probability_pct=max((f.rain_probability_pct for f in wx.forecast), default=None),
-        rain_mm_24h=rain_mm, tank_level_pct=w.level_pct,
+    """Consejo de riego con el recomendador real (E5, #7) sobre los datos de ejemplo de la parcela."""
+    soil = [(x, r.value if r else None) for x in parcel_sensors(parcel_id) if x.type == "humedad_suelo"
+            for r in [last_reading(x)]]
+    return recommend(
+        parcel_id, [z for z in ZONES if z.parcel_id == parcel_id], soil, weather(parcel_id).forecast,
+        tanks(parcel_id), utc_now(), latitude=PARCELS[parcel_id].latitude,
     )
-
-    def advice(action, summary, zones=(), total=0.0):
-        return s.IrrigationAdvice(
-            parcel_id=parcel_id, generated_at=now, action=action, summary=summary,
-            total_liters=total, available_l=w.available_l, enough_water=w.available_l >= total,
-            factors=factors, zones=list(zones),
-        )
-
-    if soil_pct is None or low is None or soil_pct >= low + 5:
-        return advice("wait", "El suelo aún tiene humedad suficiente. No hace falta regar hoy.")
-    if rain_mm >= 5:
-        return advice("skip", f"Se esperan {rain_mm} mm de lluvia en 24 h. Mejor no regar.")
-    start = (now + timedelta(days=1)).replace(hour=5, minute=0, second=0) if now.hour >= 5 else now.replace(hour=5, minute=0, second=0)
-    crop = [z for z in ZONES if z.parcel_id == parcel_id and z.type == "crop"]
-    need = {z.id: 2.0 * (z.area_m2 or 0) for z in crop}  # 2 L/m² de ejemplo
-    scale = min(1.0, w.available_l / sum(need.values())) if need and sum(need.values()) else 0.0
-    zones = [
-        s.IrrigationZone(
-            zone_id=z.id, zone_name=z.name, liters=round(need[z.id] * scale, 1), start_at=start,
-            duration_min=max(1, round(need[z.id] * scale / 300)),  # caudal de ejemplo: 300 L/min
-            reason=f"Suelo al {soil_pct} %, por debajo de lo recomendado",
-        )
-        for z in crop
-    ]
-    total = round(sum(z.liters for z in zones), 1)
-    return advice("irrigate", f"Regar {total:.0f} L repartidos en {len(zones)} zonas, a primera hora.",
-                  zones, total)
 
 
 def transactions(parcel_id: int) -> list[s.Transaction]:

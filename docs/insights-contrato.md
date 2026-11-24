@@ -109,11 +109,26 @@ si no, la API responde 404 («sin datos suficientes»). Hay dos modelos (`model`
 La banda es del 80 %: `±1,28·σ·√h`, donde σ es el error del modelo sobre el pasado reciente (como
 mínimo, el 2 % del rango entre umbrales) y h las horas de distancia. Los porcentajes se recortan a 0–100.
 
-### Consejo de riego (E5, #7)
+### Consejo de riego (E5, #7) · `demeter/services/irrigation.py` · pruebas en `tests/test_irrigation.py`
 
-Las reglas de `sample_data.py` siguen siendo de juguete (suelo bajo + poca lluvia → regar; 2 L/m²;
-caudal de 300 L/min) hasta que el recomendador (E5) defina el umbral de «hace falta regar», los
-litros por m² y el caudal reales.
+1. **Humedad de cada zona**: media de los sensores `humedad_suelo` dentro de su contorno; sin
+   sensor propio, la media de la parcela.
+2. **¿Hace falta?** Una zona pide agua por debajo de *umbral bajo + 15 % del rango* (25–60 % → 30,3 %).
+   Si ninguna lo pide → `wait`. Sin datos de suelo, sin previsión o sin agua en los depósitos → `wait`.
+3. **¿Va a llover?** Probabilidad ≥ 70 % y lluvia útil (80 % de la prevista) ≥ 60 % de lo que
+   pedirían las zonas → `skip` (idea #55: «si es muy probable que llueva, no regar»).
+4. **Cuánta**: `Kc · ET0 · (1 + sequedad) − lluvia útil`, en L/m² por la superficie de la zona.
+   ET0 por Hargreaves con la temperatura mínima y máxima prevista; `sequedad` va de 0 (suelo al
+   60 % del rango) a 1 (en el umbral bajo), así que se da hasta el doble de la ETc.
+   Kc: aguacate 0,75 · mango 0,70 · chirimoya 0,80 · tomate 1,05 · otros 0,80.
+5. **Cuándo**: la hora más fresca entre las 5:00 y las 8:00 (hora de Madrid) que no haya pasado.
+   Las zonas van seguidas con un caudal de 300 L/min (`duration_min`).
+6. **Si el agua no alcanza**, se recorta en proporción y el `summary` lo dice (decisión 5).
+
+**Reparto del agua (idea #56)**: `available_water` suma todos los depósitos y
+`distribution_options` propone tres repartos explicados: por superficie, por cultivo
+(m² × Kc) y por necesidad (lo que pide el recomendador, sin pasarse). Son funciones puras
+listas para exponerlas en la API.
 
 ## 4. Relación con lo existente
 
