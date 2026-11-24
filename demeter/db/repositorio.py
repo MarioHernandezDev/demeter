@@ -5,6 +5,8 @@ El contrato (qué funciones hay, qué reciben y qué devuelven) está en
 ``docs/repositorio-contrato.md``. Reglas que se cumplen en TODAS las funciones:
 
 - Cada función abre su propia sesión y la cierra al terminar: quien la llama no gestiona nada.
+  Única excepción: ``save_reading`` admite la sesión de quien la llama, para que la ingesta
+  guarde la lectura y evalúe sus alertas en una sola transacción.
 - Devuelven los esquemas de la API (``demeter.api.schemas``), nunca las filas de la base de
   datos, así que lo devuelto sigue siendo válido cuando la sesión ya está cerrada.
 - Una consulta de algo que no existe devuelve ``None`` (o una lista vacía), no un error.
@@ -15,11 +17,11 @@ from datetime import datetime, timezone
 
 from sqlalchemy import and_, func, or_, update
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
-from sqlmodel import select
+from sqlmodel import Session, select
 
 from demeter.api import schemas as s
 from demeter.db import conexion
-from demeter.models import Parcel, Sensor, SensorData
+from demeter.models import Alert, Parcel, Sensor, SensorData
 
 # ---------------------------------------------------------------------------------------
 # Errores
@@ -84,6 +86,21 @@ def _reading(row: SensorData, sensor: Sensor) -> s.Reading:
         value=row.value,
         type=sensor.type,
         unit=sensor.unit,
+    )
+
+
+def _alert(row: Alert) -> s.Alert:
+    # La tabla lo llama ``opened_at`` y la API ``timestamp``: se traduce aquí, en un solo sitio.
+    return s.Alert(
+        id=row.id,
+        sensor_id=row.sensor_id,
+        timestamp=row.opened_at,
+        type=row.type,
+        message=row.message,
+        acknowledged=row.acknowledged,
+        resolved_at=row.resolved_at,
+        value=row.value,
+        threshold=row.threshold,
     )
 
 
@@ -197,7 +214,9 @@ def get_parcel(parcel_id: int) -> s.ParcelDetail | None:
 # ---------------------------------------------------------------------------------------
 
 
-def save_reading(sensor_id: str, timestamp: datetime, value: float) -> s.IngestResult:
+def save_reading(
+    sensor_id: str, timestamp: datetime, value: float, session: Session | None = None
+) -> s.IngestResult:
     """Guarda una lectura. Una repetida (mismo sensor y misma hora) NO es un error.
 
     - Sensor inexistente: ``NotFoundError``.
@@ -206,6 +225,12 @@ def save_reading(sensor_id: str, timestamp: datetime, value: float) -> s.IngestR
     - ``sensors.last_seen_at`` solo AVANZA: una lectura atrasada se guarda, pero no lo mueve
       hacia atrás (si no, un reenvío de datos viejos haría parecer caído un sensor que funciona).
     - Un valor no finito (``NaN``, ``inf``, ``-inf``) lanza ``ValueError`` y no se guarda nada.
+
+    ``session`` (opcional): sin ella, la función abre su sesión y confirma (``commit``) al
+    terminar. Con ella, trabaja DENTRO de la transacción de quien llama y NO confirma: así la
+    ingesta puede guardar la lectura, llamar al motor de alertas (``evaluar_lectura``) y hacer un
+    único ``commit``, de modo que la lectura y sus alertas se guardan juntas o no se guarda nada
+    (contrato de alertas, sección 8, punto 9). Si algo falla, deshacer es cosa de quien llama.
     """
     # Integridad de los datos, no regla de negocio: SQLite convierte NaN en nulo (y la columna no
     # admite nulos) e ``inf`` se guardaría pero luego rompe el JSON y las gráficas. La API también
@@ -213,37 +238,51 @@ def save_reading(sensor_id: str, timestamp: datetime, value: float) -> s.IngestR
     if not math.isfinite(value):
         raise ValueError(f"Valor no válido para una lectura: {value!r}")
     when = _as_utc(timestamp)
-    with conexion.open_session() as session:
-        if session.get(Sensor, sensor_id) is None:
-            raise NotFoundError(f"El sensor {sensor_id!r} no existe")
 
-        # "Inserta, y si ya existe esa pareja (sensor, hora), no hagas nada". Es UNA sola
-        # instrucción que decide la base de datos, así que no hay hueco entre "comprobar si
-        # existe" y "insertar" por el que se cuele otra petición a la vez. El índice único
-        # ``uq_sensor_data_sensor_recorded`` es lo que detecta la repetida.
-        inserted = session.exec(
-            sqlite_insert(SensorData)
-            .values(sensor_id=sensor_id, recorded_at=when, value=value)
-            .on_conflict_do_nothing(index_elements=["sensor_id", "recorded_at"])
-        ).rowcount  # 1 = se insertó, 0 = ya existía
-        stored = inserted == 1
-
-        if stored:
-            # "Pon last_seen_at = esta hora, pero solo si estaba vacío o era anterior".
-            # Igual que antes, lo decide la base de datos en una sola instrucción.
-            session.exec(
-                update(Sensor)
-                .where(Sensor.id == sensor_id)
-                .where(or_(Sensor.last_seen_at.is_(None), Sensor.last_seen_at < when))
-                .values(last_seen_at=when)
-            )
-        # Un único commit: la lectura y su ``last_seen_at`` se guardan juntas o no se guarda nada.
-        session.commit()
+    if session is not None:
+        stored = _insert_reading(session, sensor_id, when, value)
+    else:
+        with conexion.open_session() as own:
+            stored = _insert_reading(own, sensor_id, when, value)
+            # Un único commit: la lectura y su ``last_seen_at`` se guardan juntas o nada.
+            own.commit()
 
     return s.IngestResult(
         sensor_id=sensor_id, timestamp=when.astimezone(timezone.utc), stored=stored,
         duplicate=not stored
     )
+
+
+def _insert_reading(session: Session, sensor_id: str, when: datetime, value: float) -> bool:
+    """El trabajo de ``save_reading`` dentro de una sesión, sin confirmar. ``True`` si la guardó."""
+    if session.get(Sensor, sensor_id) is None:
+        raise NotFoundError(f"El sensor {sensor_id!r} no existe")
+
+    # "Inserta, y si ya existe esa pareja (sensor, hora), no hagas nada". Es UNA sola
+    # instrucción que decide la base de datos, así que no hay hueco entre "comprobar si
+    # existe" y "insertar" por el que se cuele otra petición a la vez. El índice único
+    # ``uq_sensor_data_sensor_recorded`` es lo que detecta la repetida. Además, como no lanza
+    # error, no estropea la transacción de quien llama.
+    inserted = session.exec(
+        sqlite_insert(SensorData)
+        .values(sensor_id=sensor_id, recorded_at=when, value=value)
+        .on_conflict_do_nothing(index_elements=["sensor_id", "recorded_at"])
+    ).rowcount  # 1 = se insertó, 0 = ya existía
+    if inserted != 1:
+        return False
+
+    # "Pon last_seen_at = esta hora, pero solo si estaba vacío o era anterior". También lo decide
+    # la base de datos en una instrucción. ``synchronize_session="fetch"`` actualiza además el
+    # sensor si ya está cargado en esta sesión (p. ej. la API lo leyó para validarlo): sin ello,
+    # el motor de alertas, que lo lee en la misma sesión, vería el ``last_seen_at`` viejo.
+    session.exec(
+        update(Sensor)
+        .where(Sensor.id == sensor_id)
+        .where(or_(Sensor.last_seen_at.is_(None), Sensor.last_seen_at < when))
+        .values(last_seen_at=when)
+        .execution_options(synchronize_session="fetch")
+    )
+    return True
 
 
 def readings(
@@ -355,3 +394,121 @@ def set_parcel_active(parcel_id: int, active: bool) -> s.Parcel | None:
         session.exec(update(Sensor).where(Sensor.parcel_id == parcel_id).values(is_active=active))
         session.commit()  # parcela y sensores se confirman juntos, o ninguno
         return _parcel(row)
+
+
+# ---------------------------------------------------------------------------------------
+# Alertas (entrega 2)
+#
+# Abrir, cerrar y buscar la alerta activa NO está aquí: lo hace el motor de alertas de Mario L.
+# (``demeter/services/alerts.py``) dentro de la transacción de la ingesta. Aquí está lo que
+# necesitan la pantalla de alertas y el estado de conexión de los sensores.
+# ---------------------------------------------------------------------------------------
+
+
+def list_alerts(
+    parcel_id: int | None = None,
+    unread_only: bool = False,
+    alert_type: str | None = None,
+    sensor_id: str | None = None,
+    active: bool | None = None,
+    limit: int = 20,
+    offset: int = 0,
+) -> tuple[list[s.Alert], int]:
+    """Alertas, las más recientes primero, por páginas. Devuelve ``(página, total)``.
+
+    Filtros (todos opcionales y combinables):
+    - ``parcel_id``: solo las de los sensores de esa parcela.
+    - ``unread_only``: solo las no leídas (``acknowledged=False``).
+    - ``alert_type``: ``"LOW"``, ``"HIGH"`` u ``"OFFLINE"``.
+    - ``sensor_id``: solo las de ese sensor.
+    - ``active``: ``True`` solo activas (sin ``resolved_at``), ``False`` solo resueltas,
+      ``None`` todas.
+
+    ``total`` es cuántas cumplen los filtros SIN contar la paginación: es lo que la API manda en
+    la cabecera ``X-Total-Count`` para que la interfaz sepa cuántas páginas hay.
+    Con ``limit <= 0`` la página va vacía, pero ``total`` sigue siendo el real. Un ``offset``
+    negativo lanza ``ValueError``.
+    """
+    if offset < 0:
+        raise ValueError("offset no puede ser negativo")
+
+    # Los filtros se escriben UNA vez y sirven para las dos consultas (página y total), así no
+    # pueden quedar distintos.
+    conditions = []
+    if parcel_id is not None:
+        conditions.append(
+            Alert.sensor_id.in_(select(Sensor.id).where(Sensor.parcel_id == parcel_id))
+        )
+    if unread_only:
+        conditions.append(Alert.acknowledged.is_(False))
+    if alert_type is not None:
+        conditions.append(Alert.type == alert_type)
+    if sensor_id is not None:
+        conditions.append(Alert.sensor_id == sensor_id)
+    if active is True:
+        conditions.append(Alert.resolved_at.is_(None))
+    elif active is False:
+        conditions.append(Alert.resolved_at.is_not(None))
+
+    with conexion.open_session() as session:
+        total = session.exec(select(func.count()).select_from(Alert).where(*conditions)).one()
+        if limit <= 0:
+            return [], total  # en SQLite un LIMIT negativo significa "sin límite": se evita
+        rows = session.exec(
+            select(Alert)
+            .where(*conditions)
+            # A igual hora de apertura, el id desempata: así el orden es siempre el mismo y la
+            # paginación no repite ni salta alertas.
+            .order_by(Alert.opened_at.desc(), Alert.id.desc())
+            .offset(offset)
+            .limit(limit)
+        ).all()
+        return [_alert(row) for row in rows], total
+
+
+def set_acknowledged(alert_id: int, acknowledged: bool) -> s.Alert | None:
+    """Marca una alerta como leída (``True``) o no leída (``False``). ``None`` si no existe.
+
+    Solo cambia ``acknowledged``: leerla no la resuelve. Resolver lo decide el motor.
+    """
+    with conexion.open_session() as session:
+        row = session.get(Alert, alert_id)
+        if row is None:
+            return None
+        row.acknowledged = acknowledged
+        session.commit()
+        return _alert(row)
+
+
+def acknowledge_all(parcel_id: int) -> int:
+    """Marca como leídas todas las alertas sin leer de la parcela. Devuelve cuántas ha marcado.
+
+    Es lo que usa ``POST /api/alerts/ack-all?parcel_id=``. Las que ya estaban leídas no cuentan,
+    así que repetir la llamada devuelve 0. Una parcela inexistente o sin alertas también da 0.
+    """
+    with conexion.open_session() as session:
+        changed = session.exec(
+            update(Alert)
+            .where(Alert.acknowledged.is_(False))
+            .where(Alert.sensor_id.in_(select(Sensor.id).where(Sensor.parcel_id == parcel_id)))
+            .values(acknowledged=True)
+        ).rowcount
+        session.commit()
+        return changed
+
+
+def sensors_last_seen() -> list[tuple[str, datetime | None]]:
+    """``(código, last_seen_at)`` de los sensores ACTIVOS de parcelas ACTIVAS, por código.
+
+    Solo lectura. Sirve para mostrar el estado de conexión (conectado / esperando datos / sin
+    señal). ``None`` significa que el sensor nunca ha enviado datos: está "esperando", no caído.
+    Las fechas van en UTC con zona.
+    """
+    with conexion.open_session() as session:
+        rows = session.exec(
+            select(Sensor.id, Sensor.last_seen_at)
+            .join(Parcel, Parcel.id == Sensor.parcel_id)
+            .where(Sensor.is_active, Parcel.is_active)
+            .order_by(Sensor.id)
+        ).all()
+        return [(code, seen) for code, seen in rows]
