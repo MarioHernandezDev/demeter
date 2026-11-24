@@ -268,3 +268,50 @@ def last_readings(parcel_id: int) -> dict[str, s.Reading]:
             .join(Sensor, Sensor.id == SensorData.sensor_id)
         ).all()
         return {data.sensor_id: _reading(data, sensor) for data, sensor in rows}
+
+
+# ---------------------------------------------------------------------------------------
+# Parcelas: escrituras
+# ---------------------------------------------------------------------------------------
+
+
+def set_boundary(parcel_id: int, boundary: s.Polygon, area_m2: float) -> s.ParcelDetail | None:
+    """Guarda el contorno dibujado de la parcela y su superficie.
+
+    La superficie la calcula la API (``geo.polygon_area_m2``): el repositorio no la calcula ni la
+    comprueba, solo la guarda junto al contorno. Sustituye el contorno anterior, si lo había.
+    Devuelve la parcela ya actualizada, o ``None`` si no existe.
+    """
+    with conexion.open_session() as session:
+        row = session.get(Parcel, parcel_id)
+        if row is None:
+            return None
+        # SQLite no tiene tipo JSON: el contorno se guarda como texto GeoJSON y ``_parcel_detail``
+        # lo convierte de nuevo en ``Polygon`` al leerlo.
+        row.boundary = boundary.model_dump_json()
+        row.area_m2 = area_m2
+        session.commit()
+        # Tras el commit la fila se vuelve a leer sola; la conversión se hace con la sesión abierta.
+        return _parcel_detail(row)
+
+
+def set_parcel_active(parcel_id: int, active: bool) -> s.Parcel | None:
+    """Da de baja (``False``) o reactiva (``True``) una parcela Y TODOS sus sensores.
+
+    Es una sola transacción: o cambia la parcela y todos sus sensores, o no cambia nada (si falla
+    a mitad no puede quedar una parcela de baja con sensores activos que siguen generando alertas).
+    Darla de baja no borra nada: las lecturas y alertas se conservan.
+
+    Ojo: reactivar la parcela reactiva TODOS sus sensores, también los que alguien hubiera
+    desactivado por separado antes de darla de baja. Así lo fija el contrato. Devuelve ``None``
+    si la parcela no existe.
+    """
+    with conexion.open_session() as session:
+        row = session.get(Parcel, parcel_id)
+        if row is None:
+            return None
+        row.is_active = active
+        # Un único UPDATE para todos los sensores de la parcela (no uno por sensor).
+        session.exec(update(Sensor).where(Sensor.parcel_id == parcel_id).values(is_active=active))
+        session.commit()  # parcela y sensores se confirman juntos, o ninguno
+        return _parcel(row)

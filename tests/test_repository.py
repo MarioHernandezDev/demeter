@@ -439,3 +439,121 @@ def test_last_readings_usa_una_sola_consulta(db):
     finally:
         event.remove(db, "before_cursor_execute", _count)
     assert len(selects) == 1
+
+
+# ---------------------------------------------------------------------------------------
+# set_boundary
+# ---------------------------------------------------------------------------------------
+
+NEW_BOUNDARY = s.Polygon(
+    coordinates=[[[-4.0, 37.0], [-4.0, 37.1], [-3.9, 37.1], [-3.9, 37.0], [-4.0, 37.0]]]
+)
+
+
+def test_set_boundary_guarda_contorno_y_superficie_y_devuelve_la_parcela(db):
+    result = repositorio.set_boundary(2, NEW_BOUNDARY, 5000.0)  # la parcela 2 no tenía contorno
+    assert isinstance(result, s.ParcelDetail)
+    assert result.boundary == NEW_BOUNDARY and result.area_m2 == 5000.0
+    # Y queda guardado: una lectura posterior lo ve.
+    assert repositorio.get_parcel(2).boundary == NEW_BOUNDARY
+
+
+def test_set_boundary_se_guarda_como_texto_geojson(db):
+    repositorio.set_boundary(2, NEW_BOUNDARY, 5000.0)
+    with Session(db) as session:
+        text_in_db = session.get(Parcel, 2).boundary
+    assert isinstance(text_in_db, str) and s.Polygon.model_validate_json(text_in_db) == NEW_BOUNDARY
+
+
+def test_set_boundary_sustituye_el_contorno_anterior(db):
+    assert repositorio.get_parcel(1).boundary == BOUNDARY
+    repositorio.set_boundary(1, NEW_BOUNDARY, 77.0)
+    parcel = repositorio.get_parcel(1)
+    assert parcel.boundary == NEW_BOUNDARY and parcel.area_m2 == 77.0
+
+
+def test_set_boundary_no_toca_el_resto_de_la_parcela_ni_otras_parcelas(db):
+    repositorio.set_boundary(1, NEW_BOUNDARY, 77.0)
+    parcel = repositorio.get_parcel(1)
+    assert (parcel.name, parcel.location, parcel.crop) == ("Activa", "Motril", "aguacate")
+    assert repositorio.get_parcel(2).boundary is None  # la otra parcela sigue igual
+
+
+def test_set_boundary_parcela_inexistente_devuelve_none(db):
+    assert repositorio.set_boundary(999, NEW_BOUNDARY, 1.0) is None
+
+
+def test_set_boundary_acepta_parcelas_de_baja(db):
+    # El repositorio guarda; decidir si se puede editar una parcela de baja es regla de la API.
+    assert repositorio.set_boundary(3, NEW_BOUNDARY, 1.0).boundary == NEW_BOUNDARY
+
+
+# ---------------------------------------------------------------------------------------
+# set_parcel_active
+# ---------------------------------------------------------------------------------------
+
+
+def _active_sensors(parcel_id: int) -> dict[str, bool]:
+    return {x.id: x.is_active for x in repositorio.parcel_sensors(parcel_id)}
+
+
+def test_set_parcel_active_false_da_de_baja_la_parcela_y_todos_sus_sensores(db):
+    assert _active_sensors(1) == {"a001": False, "h001": True, "t001": True}
+    result = repositorio.set_parcel_active(1, False)
+    assert isinstance(result, s.Parcel) and result.id == 1
+    assert [p.id for p in repositorio.list_parcels()] == [2]  # ya no sale entre las activas
+    assert _active_sensors(1) == {"a001": False, "h001": False, "t001": False}
+
+
+def test_set_parcel_active_no_toca_los_sensores_de_otras_parcelas(db):
+    repositorio.set_parcel_active(1, False)
+    assert _active_sensors(3) == {"t003": True}
+
+
+def test_set_parcel_active_true_reactiva_la_parcela_y_todos_sus_sensores(db):
+    repositorio.set_parcel_active(3, True)
+    assert [p.id for p in repositorio.list_parcels()] == [1, 2, 3]
+    assert _active_sensors(3) == {"t003": True}
+
+
+def test_set_parcel_active_reactivar_reactiva_tambien_los_sensores_desactivados_antes(db):
+    # Contrato: reactivar la parcela reactiva TODOS sus sensores. a001 estaba desactivado por
+    # separado desde el principio, y tras dar de baja y reactivar la parcela vuelve a estar activo.
+    repositorio.set_parcel_active(1, False)
+    repositorio.set_parcel_active(1, True)
+    assert _active_sensors(1) == {"a001": True, "h001": True, "t001": True}
+
+
+def test_set_parcel_active_repetir_la_misma_orden_no_cambia_nada(db):
+    repositorio.set_parcel_active(1, False)
+    repositorio.set_parcel_active(1, False)
+    assert _active_sensors(1) == {"a001": False, "h001": False, "t001": False}
+
+
+def test_set_parcel_active_parcela_inexistente_devuelve_none(db):
+    assert repositorio.set_parcel_active(999, False) is None
+
+
+def test_set_parcel_active_dar_de_baja_conserva_las_lecturas(db):
+    # Decisión del proyecto: dar de baja = desactivar, no borrar. El historial se conserva.
+    repositorio.save_reading("t001", at(0), 20.0)
+    repositorio.set_parcel_active(1, False)
+    assert [r.value for r in repositorio.readings("t001")] == [20.0]
+
+
+def test_set_parcel_active_es_una_sola_transaccion(db):
+    """Si falla al desactivar los sensores, la parcela tampoco debe quedar de baja."""
+
+    @event.listens_for(db, "before_cursor_execute")
+    def _fail_on_sensors(conn, cursor, statement, parameters, context, executemany):
+        if statement.lstrip().upper().startswith("UPDATE SENSORS"):
+            raise RuntimeError("fallo simulado")
+
+    try:
+        with pytest.raises(Exception, match="fallo simulado"):
+            repositorio.set_parcel_active(1, False)
+    finally:
+        event.remove(db, "before_cursor_execute", _fail_on_sensors)
+
+    assert 1 in [p.id for p in repositorio.list_parcels()]  # la parcela sigue activa
+    assert _active_sensors(1) == {"a001": False, "h001": True, "t001": True}  # sin cambios
