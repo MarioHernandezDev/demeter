@@ -6,8 +6,10 @@ from demeter.state.types import (
     HistoryQuery,
     Reading,
     Sensor,
+    SensorSnapshot,
     SensorStatus,
 )
+from demeter.theme import COLORES, ESTADOS_SENSOR, estado_sensor
 
 SENSOR = {
     "id": "h001", "parcel_id": 1, "type": "humedad_suelo", "unit": "%",
@@ -54,3 +56,35 @@ def test_parametros_del_historico():
     assert HistoryQuery("h001").params() == {"limit": 500}
     q = HistoryQuery("h001", from_="2026-11-09T00:00:00Z", to="2026-11-16T00:00:00Z", limit=100)
     assert q.params() == {"limit": 100, "from": "2026-11-09T00:00:00Z", "to": "2026-11-16T00:00:00Z"}
+
+
+def test_offline_llega_de_la_api_y_gana_a_los_umbrales():
+    snap = SensorSnapshot.from_api({
+        "sensor": SENSOR, "status": "offline", "recent": [30, 22, 19],
+        "last": {"sensor_id": "h001", "timestamp": "2026-11-24T09:00:00Z", "value": 19},
+    })
+    assert snap.status == SensorStatus.OFFLINE.value and snap.offline
+    assert snap.recent == [30.0, 22.0, 19.0]
+    # Sin «status» la interfaz solo puede mirar umbrales: nunca deduce offline.
+    assert not SensorSnapshot.from_api({"sensor": SENSOR}).offline
+    assert SensorSnapshot.from_api({"sensor": SENSOR}).recent == []
+
+
+def test_alerta_offline_y_campos_nuevos():
+    a = Alert.from_api({
+        "id": 3, "sensor_id": "h001", "timestamp": "2026-11-24T09:10:00Z",
+        "type": "OFFLINE", "message": "Sin señal", "resolved_at": None,
+    })
+    assert a.active and a.value is None and a.threshold is None
+    b = Alert.from_api({
+        "id": 4, "sensor_id": "h001", "timestamp": "2026-11-24T09:10:00Z", "type": "LOW",
+        "message": "19 %", "value": 19, "threshold": 25, "resolved_at": "2026-11-24T09:30:00Z",
+    })
+    assert not b.active and b.threshold == 25
+
+
+def test_cada_estado_tiene_como_pintarse():
+    assert set(ESTADOS_SENSOR) == {s.value for s in SensorStatus}
+    assert all(e["color"] in COLORES for e in ESTADOS_SENSOR.values())
+    assert estado_sensor("offline")["clase"] == "off"
+    assert estado_sensor("raro") == ESTADOS_SENSOR["sin_datos"]

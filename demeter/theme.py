@@ -23,7 +23,28 @@ COLORES: dict[str, str] = {
     "ok": "#2f8a63",  # solo puntos de estado; NO para texto (contraste bajo)
     "ok_texto": "#1f6b4c",  # verde para texto («en rango»)
     "campo": "#3e5a22",  # verde oliva de Demetreo, para fondos de marca
+    "sin_senal": "#8a9499",  # gris de tarjeta offline: punto, borde y mini histórico
+    "sin_senal_fondo": "rgba(18, 24, 26, .05)",  # fondo de la tarjeta offline
 }
+
+# ---------------------------------------------------------------- semáforo
+# Cómo se pinta cada ``SensorStatus`` (demeter/state/types.py) en la tarjeta del
+# dashboard. ``clase`` es el modificador CSS de assets/proto/app.css
+# (``srow--off``, ``ro is-off``…); ``color`` es una clave de COLORES.
+# Los textos van siempre en ``tinta`` o ``tinta_suave``: el color solo marca el punto,
+# así el gris de «offline» no tiene problemas de contraste.
+ESTADOS_SENSOR: dict[str, dict[str, str]] = {
+    "ok": {"etiqueta": "En rango", "clase": "", "color": "ok"},
+    "LOW": {"etiqueta": "Bajo", "clase": "warn", "color": "acento"},
+    "HIGH": {"etiqueta": "Alto", "clase": "warn", "color": "acento"},
+    "offline": {"etiqueta": "Sin señal", "clase": "off", "color": "sin_senal"},
+    "sin_datos": {"etiqueta": "Esperando datos", "clase": "wait", "color": "linea"},
+}
+
+
+def estado_sensor(status: str) -> dict[str, str]:
+    """Etiqueta, clase y color de un estado; uno desconocido se trata como «sin datos»."""
+    return ESTADOS_SENSOR.get(status, ESTADOS_SENSOR["sin_datos"])
 
 # ---------------------------------------------------------------- tipografía
 FUENTES: dict[str, str] = {
