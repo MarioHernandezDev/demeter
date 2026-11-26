@@ -1,0 +1,95 @@
+/* Demeter · modo oscuro (básico) y botón sol/luna.
+   Se carga en todas las páginas (head de la app, demeter/demeter.py). El tema lo lleva Reflex:
+   clase `dark` en <html>. El cambio animado está en tema.js.
+
+   Idea: las hojas del prototipo usan --ink como TEXTO y también como FONDO de botones con texto
+   blanco. En oscuro --ink pasa a ser claro, así que esos botones (fondo claro) llevan texto tinta.
+   Las superficies de «niebla» se vuelven noche y los velos blancos translúcidos pasan a ser
+   blancos muy tenues. La cabina (su propia paleta) y las fotos no cambian. */
+
+/* ================================================================ modo oscuro */
+html.dark {
+  --ink: #e6ebe9; --paper: #0e1315; --muted: #95a3a9; --hair: rgba(230,235,233,.12);
+  --warn: #f07a45; --warn-soft: rgba(240,122,69,.14); --fog: #1a2124;
+  --dm-tinta: #e6ebe9; --dm-tinta-suave: #95a3a9; --dm-papel: #0e1315; --dm-papel-2: #161d20; --dm-linea: rgba(230,235,233,.12);
+  --dm-acento: #f07a45; --dm-acento-suave: rgba(240,122,69,.14); --dm-ok-texto: #5cc795;
+}
+html.dark body { background: var(--paper); color: var(--ink); }
+
+/* texto oscuro sobre botones y etiquetas que ahora son claros */
+html.dark :is(.pill--ink, .pill[aria-pressed="true"], .chip[aria-pressed="true"], .layers button[aria-pressed="true"], .login__btn, .act2__cta, .toast,
+  .c-tip, .t-dot span, .bar__user span, .tw__pin.is-sel, .irr__go, .bar__cta:not(.bar__cta--ghost), .bar__nav a[aria-current="page"], .act1__go,
+  .tabs a[aria-current="page"], .mpeek__go, .alerts-scope .btn:not(.btn--ghost)) { color: #12181a; }
+html.dark :is(.c-tip small, .t-dot span small, .tw__pin.is-sel span) { color: #56626a; }
+html.dark :is(.tw__pin.is-sel.is-warn b, .bar__nav a[aria-current="page"] b, .tabs a[aria-current="page"] b) { color: #b33a12; }
+html.dark .irr__go:is(.is-busy, .is-done) { color: #fff; }
+
+/* textos grises escritos a mano */
+html.dark :is(.kick, .stamp, .field, .login__hint, .tw__hint, .act2__kicker) { color: var(--muted); }
+html.dark :is(.lede, .acct p, .enter__txt, .act2__text, .e404__t p) { color: #c2ccd0; }
+html.dark .wl.is-alert b { color: var(--warn); }
+
+/* barra */
+html.dark.is-fog .bar__nav a { border-color: rgba(230,235,233,.3); background: rgba(255,255,255,.06); }
+html.dark.is-fog .bar__cta--ghost { border-color: rgba(230,235,233,.3); }
+html.dark body.app.has-tabs .bar { background: rgba(14,19,21,.72); box-shadow: 0 1px 0 rgba(255,255,255,.06); }
+
+/* portada: la foto pasa a ser de noche (el nombre sigue blanco) */
+html.dark :is(.scene__bg, .scene__fg) { filter: brightness(.52) saturate(.7) contrast(1.08); }
+
+/* fondos grandes: la niebla se vuelve noche */
+html.dark .fog { background: radial-gradient(120% 90% at 50% 45%, #232b2e 0%, var(--fog) 60%, #0f1416 100%); }
+html.dark .next { background: #141a1c; color: var(--ink); }
+html.dark :is(.page, body.app .page) { background: linear-gradient(180deg, #1c2326 0, #151b1e 40vh, #11171a 90vh, var(--paper) 150vh); }
+html.dark .page--below { background: linear-gradient(180deg, #161c1f 0, #11171a 50vh, var(--paper) 100vh) !important; }
+html.dark .cmd { background: radial-gradient(90% 80% at 62% 45%, #20282b 0%, #161d20 55%, #0f1517 100%); }
+html.dark .split { background: radial-gradient(100% 80% at 30% 40%, #1b2225 0%, #121819 70%); }
+html.dark .enter { background: radial-gradient(120% 90% at 30% 45%, #222a2d 0%, var(--fog) 60%, #101518 100%); }
+html.dark .reco { background: #172023; box-shadow: inset 0 0 0 1px var(--hair); }
+
+/* cristales y velos blancos → velos tenues */
+html.dark .glass { background: rgba(22,29,32,.66); box-shadow: inset 0 0 0 1px rgba(255,255,255,.07), 0 24px 48px -28px rgba(0,0,0,.6); }
+html.dark :is(.stats div, .fc li:first-child, .te__n:not(.is-warn), .chip:not([aria-pressed="true"]), .mf__status) { background: rgba(255,255,255,.06); }
+html.dark .tl { background: rgba(255,255,255,.04); box-shadow: inset 0 0 0 1px rgba(255,255,255,.08); }
+html.dark :is(.field input, .mini input) { background: rgba(255,255,255,.05); border-color: rgba(230,235,233,.22); }
+html.dark .field input:focus { background: rgba(255,255,255,.09); border-color: var(--ink); }
+html.dark :is(.pill, .chip, .mf__demo) { border-color: rgba(230,235,233,.26); }
+@media (hover: hover) and (pointer: fine) {
+  html.dark .pill:not(.pill--ink):not([aria-pressed="true"]):hover, html.dark .prow:hover, html.dark .pr:hover, html.dark .mf__demo:hover { background: rgba(255,255,255,.07); }
+}
+html.dark .pr[aria-current="true"] { background: rgba(255,255,255,.08); box-shadow: inset 0 0 0 1px rgba(255,255,255,.1), 0 18px 36px -24px rgba(0,0,0,.6); }
+html.dark .tw__pin:not(.is-sel) { background: rgba(20,27,30,.86); box-shadow: 0 8px 20px -10px rgba(0,0,0,.7); }
+html.dark .map__hint { background: rgba(14,19,21,.75); }
+html.dark .m-card { background: #182023; box-shadow: 0 20px 40px -18px rgba(0,0,0,.7); }
+html.dark :is(.c-dot, .ro__dot) { box-shadow: 0 0 0 3px var(--paper); }
+html.dark :is(.t-dot--bajo, .ar__k--bajo) { background: var(--paper); }
+html.dark :is(.ro__range, .fc__bar) { background: rgba(255,255,255,.1); }
+html.dark .te__bars i:not(.is-out) { background: rgba(230,235,233,.2); }
+html.dark .irr__range::-webkit-slider-runnable-track { background: linear-gradient(90deg, #2b6f8f var(--f), rgba(255,255,255,.14) var(--f)); }
+html.dark .irr__range::-moz-range-track { background: linear-gradient(90deg, #2b6f8f var(--f), rgba(255,255,255,.14) var(--f)); }
+
+/* marcos de ventana (doble anillo) */
+html.dark :is(.split__map, .enter__win) { box-shadow: 0 0 0 10px #22313a, 0 0 0 12px #3a4f59, 0 40px 80px -40px rgba(0,0,0,.7); }
+@media (max-width: 980px) { html.dark .split__map { box-shadow: 0 0 0 6px #22313a, 0 0 0 7px #3a4f59; } }
+@media (max-width: 760px) { html.dark .enter__win { box-shadow: 0 0 0 6px #22313a, 0 0 0 7px #3a4f59; } }
+
+/* mapa de parcelas */
+html.dark .m-bg { fill: #161d20; }
+html.dark .m-sea { fill: #1b2d35; }
+html.dark .m-c { stroke: rgba(230,235,233,.09); } html.dark .m-c--major { stroke: rgba(230,235,233,.2); }
+html.dark .m-lbl { fill: #7d8b91; }
+html.dark .m-p polygon { fill: rgba(230,235,233,.05); }
+html.dark :is(.m-p:hover, .m-p.is-hover, .m-p:focus-visible) polygon { fill: rgba(230,235,233,.16); }
+html.dark .m-p.is-sel polygon { fill: rgba(230,235,233,.24); }
+
+/* gemelo del panel (WebGL con líneas tinta): se invierte para leerse sobre la noche */
+html.dark .tw canvas { filter: invert(1) hue-rotate(180deg); }
+
+/* mascota: pie de página, bocadillo y 404 */
+html.dark .mf { background: #141c11; color: var(--ink); }
+html.dark .mf__col :is(a, span) { color: #b5c4a5; }
+html.dark .mf__word { color: #c6dba9; }
+html.dark .mf__legal { background: #0a0f08; color: #b5c4a5; }
+html.dark .mpeek__bubble { background: #1a2326; box-shadow: inset 0 0 0 1px rgba(255,255,255,.08), 0 14px 34px rgba(0,0,0,.5); }
+html.dark .e404__n { color: #9cc17a; }
+html.dark .e404 [data-mascot-404]::after { background: rgba(0,0,0,.4); }
