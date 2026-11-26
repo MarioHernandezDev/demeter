@@ -94,7 +94,10 @@ if (root && card) {
     });
   };
 
+  // Solo se pinta con la sección en pantalla y la pestaña visible (la cabina va en el mismo scroll).
+  let visible = false;
   const frame = (t) => {
+    if (!visible || document.hidden) { raf = 0; return; }
     raf = requestAnimationFrame(frame);
     p += (target - p) * 0.2;
     const ang = 0.55 + p * 1.9 + (reduced ? 0 : t * 0.00008);
@@ -111,7 +114,10 @@ if (root && card) {
   addEventListener('resize', measure);
   addEventListener('resize', resize);
   measure();
-  raf = requestAnimationFrame(frame);
+  const despertar = () => { if (!raf && visible && !document.hidden) raf = requestAnimationFrame(frame); };
+  const io = new IntersectionObserver(([e]) => { visible = e.isIntersecting; despertar(); });
+  io.observe(root);
+  document.addEventListener('visibilitychange', despertar);
 
   // ---- «páginas»: entre la cabina, el gemelo y lo que sigue no se puede quedar a medias.
   // Si estás entre dos pantallas, al deslizar te lleva entera a la siguiente (o a la anterior).
@@ -153,6 +159,8 @@ if (root && card) {
     removeEventListener('scroll', snap);
     removeEventListener('wheel', stopWheel);
     cancelAnimationFrame(raf);
+    io.disconnect();
+    document.removeEventListener('visibilitychange', despertar);
     removeEventListener('scroll', measure);
     removeEventListener('resize', measure);
     removeEventListener('resize', resize);
