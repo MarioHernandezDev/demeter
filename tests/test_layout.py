@@ -72,6 +72,48 @@ def test_cada_pagina_del_prototipo_tiene_su_plantilla():
         assert ".html" not in html
 
 
+def test_contenido_con_centro_mete_el_componente_en_el_marcador(monkeypatch):
+    monkeypatch.setattr(prototipo, "plantilla", lambda _: '<main id="top"><p>antes</p><!-- @x --><p>despues</p></main>')
+    html = str(prototipo.contenido_con_centro("x", "<!-- @x -->", rx.el.span("centro"), ""))
+    assert html.index("antes") < html.index("centro") < html.index("despues")
+    assert "@x" not in html
+
+
+def test_contenido_con_centro_avisa_si_falta_el_marcador_o_el_main(monkeypatch):
+    monkeypatch.setattr(prototipo, "plantilla", lambda _: '<main id="top"><p>sin marcador</p></main>')
+    with pytest.raises(ValueError, match="marcador"):
+        prototipo.contenido_con_centro("x", "<!-- @x -->", rx.el.span(), "")
+    monkeypatch.setattr(prototipo, "plantilla", lambda _: "<div><!-- @x --></div>")
+    with pytest.raises(ValueError, match="main"):
+        prototipo.contenido_con_centro("x", "<!-- @x -->", rx.el.span(), "")
+
+
+def test_la_portada_lleva_la_cabina_3d_y_el_gemelo(paginas):
+    from demeter.components.cabina3d import mundos
+    from demeter.pages.inicio import MARCADOR_MUNDOS
+
+    assert MARCADOR_MUNDOS in prototipo.plantilla("inicio")
+    html = paginas["inicio"]
+    assert "Cabina3D" in html and "data-ss-card" in html
+    # los scripts van en el on_mount, que no sale en el HTML: se miran en el código de la página
+    import inspect
+
+    import demeter.pages.inicio as inicio
+
+    assert '"scroll-split.js"' in inspect.getsource(inicio)
+    assets = prototipo.PLANTILLAS.parent.parent.parent / "assets"
+    ids = [m["id"] for m in mundos()]
+    assert ids == ["medir", "avisar", "regar", "gemelo"]
+    for m in mundos():
+        assert (assets / m["img"].lstrip("/")).is_file(), m["img"]
+
+
+def test_ningun_script_de_la_portada_tira_de_cdn_para_three():
+    proto = prototipo.PLANTILLAS.parent.parent.parent / "assets" / "proto"
+    for js in ("scroll-split.js", "intro.js", "twin.js"):
+        assert "cdn.jsdelivr.net/npm/three" not in (proto / js).read_text(encoding="utf-8"), js
+
+
 # ---------------------------------------------------------------- rutas
 
 
