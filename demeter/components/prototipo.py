@@ -39,11 +39,15 @@ def _arranque(clase_body: str, niebla: bool, scripts: tuple[str, ...]) -> str:
       nuevo si Reflex cambia de página sin recargar (p. ej. tras el login).
     - Mientras cargan, ``<html data-dm-scripts>``: la pantalla de carga del aguacate
       (``assets/proto/carga.js``) espera a que se quite.
+    - Quita el pie y el aviso de Demetreo de la página anterior (``mascota.js`` los cuelga de
+      ``<body>``). Si la página nueva los quiere, ``mascota.js`` los vuelve a poner; si no
+      (el login), se quedarían sin estilos y el dibujo saldría a pantalla completa.
     """
     return (
         "(async () => {"
         "const raiz = document.documentElement; raiz.setAttribute('data-dm-scripts', '');"
         "try {"
+        "document.querySelectorAll('footer.mf, .mpeek').forEach((n) => n.remove());"
         f"document.body.className = {json.dumps(clase_body)};"
         f"raiz.classList.toggle('is-fog', {json.dumps(niebla)});"
         "const v = Date.now();"
