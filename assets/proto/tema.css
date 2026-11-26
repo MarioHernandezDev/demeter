@@ -40,6 +40,7 @@ html.dark {
   --warn: #f07a45; --warn-soft: rgba(240,122,69,.14); --fog: #1a2124;
   --dm-tinta: #e6ebe9; --dm-tinta-suave: #95a3a9; --dm-papel: #0e1315; --dm-papel-2: #161d20; --dm-linea: rgba(230,235,233,.12);
   --dm-acento: #f07a45; --dm-acento-suave: rgba(240,122,69,.14); --dm-ok-texto: #5cc795;
+  --off: #7d8b91; --off-soft: rgba(255,255,255,.05); --dm-sin-senal: #7d8b91; --dm-sin-senal-fondo: rgba(255,255,255,.05);
 }
 html.dark body { background: var(--paper); color: var(--ink); }
 
@@ -50,6 +51,10 @@ html.dark :is(.pill--ink, .pill[aria-pressed="true"], .chip[aria-pressed="true"]
 html.dark :is(.c-tip small, .t-dot span small, .tw__pin.is-sel span) { color: #56626a; }
 html.dark :is(.tw__pin.is-sel.is-warn b, .bar__nav a[aria-current="page"] b, .tabs a[aria-current="page"] b) { color: #b33a12; }
 html.dark .irr__go:is(.is-busy, .is-done) { color: #fff; }
+
+/* sensor sin señal y esperando datos (app.css): el gris sigue siendo solo de puntos y líneas;
+   la cifra «esperando» pasa de tinta tenue a claro tenue */
+html.dark .srow--wait .srow__v { color: rgba(230,235,233,.3); }
 
 /* textos grises escritos a mano */
 html.dark :is(.kick, .stamp, .field, .login__hint, .tw__hint, .act2__kicker) { color: var(--muted); }
