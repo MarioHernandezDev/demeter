@@ -1,6 +1,7 @@
 // Gemelo 3D en la portada: un bancal en terrazas (Three.js) dentro de una tarjeta que, al bajar,
 // se parte en tres paneles y se da la vuelta para enseñar qué hace Demeter (medir, avisar, regar).
-import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
+// three.js 0.160.0 (MIT) va copiado en assets/proto/vendor: la demo tiene que funcionar sin internet.
+import * as THREE from './vendor/three.module.min.js';
 
 window.__ssCleanup?.();
 const root = document.querySelector('.ss');
