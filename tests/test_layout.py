@@ -134,6 +134,11 @@ def test_ningun_script_de_la_portada_tira_de_cdn_para_three():
         assert "cdn.jsdelivr.net/npm/three" not in (proto / js).read_text(encoding="utf-8"), js
 
 
+def test_al_cambiar_de_pagina_se_quita_la_mascota_de_la_anterior():
+    js = prototipo._arranque("p-login", False, ())
+    assert "footer.mf, .mpeek" in js and ".remove()" in js
+
+
 # ---------------------------------------------------------------- rutas
 
 
