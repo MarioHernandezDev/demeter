@@ -1,4 +1,4 @@
-"""Modo oscuro: el botón sol/luna de la barra y lo que va en el ``<head>``.
+"""Modo oscuro y pantalla de carga: el botón sol/luna de la barra y lo que va en el ``<head>``.
 
 - El estado es el modo de color de Reflex (clase ``dark``/``light`` en ``<html>`` y
   ``localStorage.theme``); su script del ``<head>`` lo aplica antes de pintar.
@@ -19,10 +19,18 @@ S = rx.el.svg  # elementos SVG (mask, circle, line…)
 
 
 def cabeza() -> list[rx.Component]:
-    """Para ``head_components`` de la app (en todas las páginas): la hoja y el script del tema."""
+    """Para ``head_components`` de la app (en todas las páginas): tema y pantalla de carga.
+
+    La pantalla de carga (el aguacate que gira, ``assets/proto/carga.css``) es CSS puro y se ve
+    desde el primer pintado; ``carga.js`` la quita cuando la página está lista.
+    """
     return [
         rx.el.link(rel="stylesheet", href=HOJA),
+        rx.el.link(rel="stylesheet", href="/proto/carga.css"),
+        rx.el.link(rel="preload", href="/proto/img/carga/aguacate-frente.svg", custom_attrs={"as": "image"}),
+        rx.el.link(rel="preload", href="/proto/img/carga/aguacate-dorso.svg", custom_attrs={"as": "image"}),
         rx.el.script(src=SCRIPT, defer=True),
+        rx.el.script(src="/proto/carga.js", defer=True),
     ]
 
 
