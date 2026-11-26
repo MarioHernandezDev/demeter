@@ -36,7 +36,7 @@ Lo manda la API en `sensors[].status` (`GET /api/dashboard`). La tabla vive en `
 El estado es el modo de color de Reflex: clase `dark` en `<html>` y `localStorage.theme` (el script que Reflex pone en el `<head>` lo aplica antes de pintar, así que no hay parpadeo). El botón sol/luna está en las tres barras (`tema.boton_tema()`).
 
 - **Paleta:** `assets/proto/tema.css` redefine en `html.dark` las variables del prototipo (`--ink`, `--paper`, `--muted`, `--warn`, `--off`…) y las `--dm-*`. Los botones que en claro son tinta con texto blanco pasan a ser claros con texto tinta. La cabina de la portada y las fotos no cambian; la foto de la portada se oscurece y el gemelo del panel se invierte.
-- **Cambio animado:** `assets/proto/tema.js`. Una mancha de tinta sale del botón y se extiende en vetas y humo (campo de ruido en WebGL2 + View Transitions + filtro SVG). Sin View Transitions, sin WebGL2 o con «reducir movimiento», el cambio es instantáneo.
+- **Cambio animado:** `assets/proto/tema.js`. Una mancha de tinta sale del botón y se extiende en vetas y humo (campo de ruido en WebGL2 + View Transitions + máscara SVG con un filtro dentro). Sin View Transitions, sin WebGL2 o con «reducir movimiento», el cambio es instantáneo.
 
 | Token oscuro | Valor | Uso | Contraste sobre `#0e1315` |
 |---|---|---|---|
