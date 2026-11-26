@@ -37,13 +37,18 @@ def _arranque(clase_body: str, niebla: bool, scripts: tuple[str, ...]) -> str:
     - Pone en ``<body>`` y ``<html>`` las clases que esperan las hojas del prototipo.
     - Carga cada script como módulo y en orden. El ``?v=`` fuerza a ejecutarlo de
       nuevo si Reflex cambia de página sin recargar (p. ej. tras el login).
+    - Mientras cargan, ``<html data-dm-scripts>``: la pantalla de carga del aguacate
+      (``assets/proto/carga.js``) espera a que se quite.
     """
     return (
         "(async () => {"
+        "const raiz = document.documentElement; raiz.setAttribute('data-dm-scripts', '');"
+        "try {"
         f"document.body.className = {json.dumps(clase_body)};"
-        f"document.documentElement.classList.toggle('is-fog', {json.dumps(niebla)});"
+        f"raiz.classList.toggle('is-fog', {json.dumps(niebla)});"
         "const v = Date.now();"
         f"for (const s of {json.dumps(list(scripts))}) {{ await import(`/proto/${{s}}?v=${{v}}`); }}"
+        "} finally { raiz.removeAttribute('data-dm-scripts'); }"
         "})();"
     )
 
