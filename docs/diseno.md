@@ -31,6 +31,22 @@ Lo manda la API en `sensors[].status` (`GET /api/dashboard`). La tabla vive en `
 
 `offline` solo puede venir del servidor (necesita la hora de la última lectura): `Sensor.status_for` nunca lo devuelve.
 
+## Modo oscuro
+
+El estado es el modo de color de Reflex: clase `dark` en `<html>` y `localStorage.theme` (el script que Reflex pone en el `<head>` lo aplica antes de pintar, así que no hay parpadeo). El botón sol/luna está en las tres barras (`tema.boton_tema()`).
+
+- **Paleta:** `assets/proto/tema.css` redefine en `html.dark` las variables del prototipo (`--ink`, `--paper`, `--muted`, `--warn`, `--off`…) y las `--dm-*`. Los botones que en claro son tinta con texto blanco pasan a ser claros con texto tinta. La cabina de la portada y las fotos no cambian; la foto de la portada se oscurece y el gemelo del panel se invierte.
+- **Cambio animado:** `assets/proto/tema.js`. Una mancha de tinta sale del botón y se extiende en vetas y humo (campo de ruido en WebGL2 + View Transitions + filtro SVG). Sin View Transitions, sin WebGL2 o con «reducir movimiento», el cambio es instantáneo.
+
+| Token oscuro | Valor | Uso | Contraste sobre `#0e1315` |
+|---|---|---|---|
+| `--ink` / `--dm-tinta` | `#e6ebe9` | texto principal | 15,5:1 |
+| `--muted` / `--dm-tinta-suave` | `#95a3a9` | texto secundario | 7,2:1 |
+| `--paper` / `--dm-papel` | `#0e1315` | fondo | — |
+| `--warn` / `--dm-acento` | `#f07a45` | alertas y acento | 6,7:1 |
+| `--dm-ok-texto` | `#5cc795` | texto «en rango» | 9,0:1 |
+| `--off` / `--dm-sin-senal` | `#7d8b91` | **solo** punto, borde y mini histórico sin señal | 5,3:1 |
+
 ## Tipografía
 
 - **Mona Sans** (variable, ancho 75–125): interfaz. El nombre «DEMETER» de la portada va en ancho 75 %.
@@ -46,6 +62,7 @@ Se cargan desde Google Fonts (`theme.GOOGLE_FONTS`); si no hay red, caen a las f
 | Barra y pestañas | `demeter/components/layout.py` (Reflex) | Sección activa con `aria-current`, alertas sin leer (`UIState`), usuario y «Salir» (`AuthState`). Tres variantes: `app`, `portada` y `acceso`. En móvil (≤ 760 px) la navegación pasa a una píldora de cuatro pestañas abajo. |
 | Login | `demeter/pages/login.py` (Reflex) + `assets/login/` | Variante «Aurora» del prototipo de login: fondo WebGL (`fondo.js`), caja de cristal y Demetreo, que llega corriendo, sigue el usuario con los ojos y se tapa los ojos con la contraseña (`demetreo.js`). El formulario envía a `AuthState.login` (C3 #30 lo conecta a la API). |
 | Contenido de cada pantalla | `demeter/pages/plantillas/*.html` | Maqueta del prototipo con datos de ejemplo, insertada con `prototipo.contenido()`. |
+| Modo oscuro | `demeter/components/tema.py` + `assets/proto/tema.css` y `tema.js` | Botón sol/luna de la barra y lo que va en el `<head>` de todas las páginas (`tema.cabeza()`, desde `demeter/demeter.py`). |
 | Estilos, scripts e imágenes | `assets/proto/` | `proto.css`, `app.css` y `mascota.css`; `intro.js` (portada: niebla y bancal en líneas con Three.js), `twin.js` (gemelo 3D del panel), `app.js` (gráficas, mapa, alertas y umbrales de ejemplo) y `mascota.js` (Demetreo griego: pie, aviso y 404). |
 
 **Cómo se sustituye una plantilla:** la rama de cada pantalla (por ejemplo `feature/dashboard-graficas` en el panel) rehace su contenido con componentes Reflex y datos de la API, borra su `.html` de `plantillas/` y deja de llamar a `prototipo.contenido()`. La barra y las pestañas no se tocan.
