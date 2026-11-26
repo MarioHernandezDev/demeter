@@ -7,6 +7,12 @@
    Las superficies de «niebla» se vuelven noche y los velos blancos translúcidos pasan a ser
    blancos muy tenues. La cabina (su propia paleta) y las fotos no cambian. */
 
+/* la mancha de tinta: sin el fundido por defecto; la página nueva entra por el filtro #dm-tinta
+   (tema.js lo crea y mueve su umbral en cada fotograma) */
+html.is-tema-vt::view-transition-old(root),
+html.is-tema-vt::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
+html.is-tema-vt::view-transition-new(root) { z-index: 2; filter: url(#dm-tinta); }
+
 /* ================================================================ modo oscuro */
 html.dark {
   --ink: #e6ebe9; --paper: #0e1315; --muted: #95a3a9; --hair: rgba(230,235,233,.12);
