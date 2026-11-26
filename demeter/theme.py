@@ -57,7 +57,7 @@ GOOGLE_FONTS = (
     "&family=Mona+Sans:wdth,wght@75..125,200..900&family=Geist+Mono:wght@400..500&display=swap"
 )
 # Hojas del prototipo (assets/proto/), en el orden en que se cargan.
-HOJAS_PORTADA = ("/proto/proto.css", "/proto/mascota.css")
+HOJAS_PORTADA = ("/proto/proto.css", "/proto/cabina/cabina.css", "/proto/mascota.css")
 HOJAS_APP = ("/proto/proto.css", "/proto/app.css", "/proto/mascota.css")
 
 # ---------------------------------------------------------------- medidas
