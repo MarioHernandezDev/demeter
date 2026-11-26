@@ -7,6 +7,27 @@
    Las superficies de «niebla» se vuelven noche y los velos blancos translúcidos pasan a ser
    blancos muy tenues. La cabina (su propia paleta) y las fotos no cambian. */
 
+/* ---------------------------------------------------------------- botón sol/luna (en la barra) */
+.bar__tema { flex: none; position: relative; width: 36px; height: 36px; display: inline-grid; place-items: center; padding: 0; border-radius: 99px; cursor: pointer;
+  color: inherit; border: 1px solid rgba(255,255,255,.55); background: rgba(255,255,255,.08); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+  -webkit-tap-highlight-color: transparent; transition: background-color .2s ease, border-color .2s ease, transform .16s cubic-bezier(.23,1,.32,1); }
+.bar__tema:active { transform: scale(.92); }
+.bar__tema:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+@media (hover: hover) and (pointer: fine) { .bar__tema:hover { background: rgba(255,255,255,.22); } }
+html.is-fog .bar__tema, body.app .bar__tema { border-color: rgba(18,24,26,.35); background: rgba(255,255,255,.25); }
+html.in-cab3 .bar__tema { border-color: rgba(255,255,255,.5); background: rgba(255,255,255,.1); }
+
+/* el icono: un sol que se vuelve luna. El «bocado» es un círculo en la máscara que entra en el
+   sol; los rayos giran y se recogen. */
+.tema__ico { width: 18px; height: 18px; overflow: visible; }
+.tema__astro { r: 5px; transition: r .5s cubic-bezier(.23,1,.32,1); }
+.tema__bocado { cx: 30px; cy: -6px; transition: cx .5s cubic-bezier(.23,1,.32,1), cy .5s cubic-bezier(.23,1,.32,1); }
+.tema__rayos { transform-box: view-box; transform-origin: 12px 12px; transition: transform .5s cubic-bezier(.23,1,.32,1) .08s, opacity .3s ease .08s; }
+html.dark .tema__astro { r: 9px; }
+html.dark .tema__bocado { cx: 17px; cy: 7px; transition-delay: .06s; }
+html.dark .tema__rayos { transform: rotate(-90deg) scale(.4); opacity: 0; transition-delay: 0s; }
+@media (prefers-reduced-motion: reduce) { .tema__astro, .tema__bocado, .tema__rayos { transition: none; } }
+
 /* la mancha de tinta: sin el fundido por defecto; la página nueva entra por el filtro #dm-tinta
    (tema.js lo crea y mueve su umbral en cada fotograma) */
 html.is-tema-vt::view-transition-old(root),
@@ -36,7 +57,7 @@ html.dark :is(.lede, .acct p, .enter__txt, .act2__text, .e404__t p) { color: #c2
 html.dark .wl.is-alert b { color: var(--warn); }
 
 /* barra */
-html.dark.is-fog .bar__nav a { border-color: rgba(230,235,233,.3); background: rgba(255,255,255,.06); }
+html.dark.is-fog .bar__nav a, html.dark.is-fog .bar__tema, html.dark body.app .bar__tema { border-color: rgba(230,235,233,.3); background: rgba(255,255,255,.06); }
 html.dark.is-fog .bar__cta--ghost { border-color: rgba(230,235,233,.3); }
 html.dark body.app.has-tabs .bar { background: rgba(14,19,21,.72); box-shadow: 0 1px 0 rgba(255,255,255,.06); }
 
