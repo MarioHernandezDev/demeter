@@ -178,6 +178,49 @@ class Reading(BaseModel):
     unit: str = ""
 
 
+HistoryRange = Literal["24h", "7d", "30d"]
+
+
+class HistoryPoint(BaseModel):
+    """Un tramo del histórico: de ``time`` a ``time + bucket_minutes``."""
+
+    time: datetime
+    min: float
+    avg: float
+    max: float
+    count: int  # lecturas que cayeron en el tramo
+
+
+class HistorySummary(BaseModel):
+    """Mínimo, media y máximo de todo el rango, con cuántas lecturas hay."""
+
+    min: float
+    avg: float
+    max: float
+    count: int
+
+
+class SensorHistory(BaseModel):
+    """Histórico agregado de un sensor. ``GET /api/sensors/{id}/history?range=24h|7d|30d``.
+
+    ``points`` va de antiguo a reciente y **sin los tramos vacíos**: un hueco entre dos puntos es
+    un hueco en los datos y la gráfica debe dibujarlo como tal. ``summary`` es ``null`` si no hay
+    lecturas. Los umbrales van incluidos para dibujar las líneas de límite.
+    """
+
+    sensor_id: str
+    type: str = ""
+    unit: str = ""
+    range: HistoryRange
+    since: datetime
+    until: datetime
+    bucket_minutes: int
+    threshold_low: Optional[float] = None
+    threshold_high: Optional[float] = None
+    points: list[HistoryPoint] = Field(default_factory=list)
+    summary: Optional[HistorySummary] = None
+
+
 class ReadingIn(BaseModel):
     """Cuerpo de ``POST /api/sensors/{sensor_id}/data`` (ingesta, cabecera ``X-API-Key``).
 

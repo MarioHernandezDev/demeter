@@ -27,6 +27,7 @@ from demeter.api.security import create_access_token, decode_access_token, hash_
 from demeter.db import conexion
 from demeter.db import repositorio as repo
 from demeter.services.alert_rules import card_status
+from demeter.services import history as history_service
 from demeter.services import weather as weather_service
 from demeter.services.forecast import predict_sensor
 from demeter.services.irrigation import recommend
@@ -242,6 +243,28 @@ def sensor_data(
     return repo.readings(sensor_id, since=t0, limit=limit)
 
 
+@router.get("/sensors/{sensor_id}/history", response_model=s.SensorHistory, tags=["sensores"])
+def sensor_history(
+    sensor_id: str,
+    range: s.HistoryRange = Query(default="24h", description="24h (tramos de 10 min), 7d (1 h) o 30d (6 h)"),
+    user: s.User = ANY,
+):
+    """Histórico agregado para las gráficas (mín., media y máx. por tramo) y el resumen del rango,
+    que Ajustes usa para enseñar «cómo fue la semana» de un sensor junto a sus límites."""
+    sensor = _readable_sensor(sensor_id, user)
+    since, until, step, buckets = history_service.aggregate(sensor_id, range)
+    summary = history_service.summarize(buckets)
+    return s.SensorHistory(
+        sensor_id=sensor_id, type=sensor.type, unit=sensor.unit, range=range, since=since,
+        until=until, bucket_minutes=int(step.total_seconds() // 60),
+        threshold_low=sensor.threshold_low, threshold_high=sensor.threshold_high,
+        points=[s.HistoryPoint(time=b.start, min=b.minimum, avg=b.average, max=b.maximum, count=b.count)
+                for b in buckets],
+        summary=None if summary is None else s.HistorySummary(
+            min=summary.minimum, avg=summary.average, max=summary.maximum, count=summary.count),
+    )
+
+
 # Lo que se admite como hora de una lectura en vivo: algo de margen hacia atrás (una placa
 # puede reenviar lo que no pudo mandar) y casi nada hacia delante (un reloj mal puesto).
 MAX_PAST = timedelta(hours=24)
@@ -438,6 +461,7 @@ def list_alerts(
     type: Optional[s.AlertType] = None,
     sensor_id: Optional[str] = None,
     active: Optional[bool] = Query(default=None, description="true: activas; false: resueltas"),
+    since: Optional[datetime] = Query(default=None, description="Solo las abiertas desde esta fecha (ISO 8601), p. ej. los últimos 7 días"),
     limit: int = Query(default=20, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     user: s.User = ANY,
@@ -447,7 +471,7 @@ def list_alerts(
         _visible_parcel(parcel_id, user)
     page, total = repo.list_alerts(
         parcel_id=parcel_id, unread_only=unread_only, alert_type=type, sensor_id=sensor_id,
-        active=active, limit=limit, offset=offset,
+        active=active, limit=limit, offset=offset, opened_since=since,
     )
     response.headers["X-Total-Count"] = str(total)
     return page
