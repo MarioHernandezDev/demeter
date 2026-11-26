@@ -10,7 +10,8 @@
 //       G = humo: volutas que se adelantan al frente (la tinta «se desvanece» en gris)
 //       B = vetas: bandas finas marmoladas, paralelas al frente y retorcidas
 //  2. View Transitions: el navegador congela la página con el tema viejo y debajo cambiamos el tema.
-//  3. Un filtro SVG sobre la página nueva (::view-transition-new(root)) calcula en cada fotograma
+//  3. La página nueva (::view-transition-new(root)) lleva una MÁSCARA SVG con la imagen del campo
+//     y, dentro, un filtro que la umbraliza; en cada fotograma solo cambian sus números:
 //       tinta = kf·(nivel − R) + kv·(B − ½)      (borde casi duro, con vetas en la franja)
 //       humo  = kh·(nivel − G)                    (rampa suave: volutas semitransparentes)
 //       alfa  = tinta ∪ HUMO·humo
@@ -41,7 +42,6 @@
     [0.62, 0.91], [0.72, 1.03], [0.84, 1.18], [0.93, 1.32], [1, 1.45]];
 
   const raiz = document.documentElement;
-  const SVGNS = "http://www.w3.org/2000/svg";
   const actual = () => (raiz.classList.contains("dark") ? "dark" : "light");
 
   let enCurso = false; // hay un cambio con tinta en marcha
@@ -119,6 +119,12 @@
                  .5 + .5 * veta * fuerza, 1.);
   }`;
 
+  // ------------------------------------------------------------------ 3. máscara SVG (umbral del campo)
+  // <mask id="dm-tinta-mascara"> con la imagen del campo, y dentro el filtro #dm-tinta que la
+  // umbraliza. La página nueva lleva mask: url(#dm-tinta-mascara) (tema.css). En cada fotograma
+  // solo cambian los números de las dos feColorMatrix: es instantáneo, no se carga nada.
+  // (Un filter: url(#…) puesto directamente en el pseudo-elemento ya no lo aplica Chrome 158;
+  // una máscara SVG sí, y el filtro va dentro de ella, sobre la imagen.)
   let gl = null, programa = null, lienzo = null;
   function prepararGL() {
     if (gl) return true;
@@ -126,30 +132,31 @@
     gl = lienzo.getContext("webgl2", { preserveDrawingBuffer: true, antialias: false, premultipliedAlpha: false });
     if (!gl) return false;
     const sombreador = (tipo, src) => {
-      const s = gl.createShader(tipo); gl.shaderSource(s, src); gl.compileShader(s);
-      if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
-      return s;
+      const sh = gl.createShader(tipo); gl.shaderSource(sh, src); gl.compileShader(sh);
+      if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(sh));
+      return sh;
     };
     programa = gl.createProgram();
     gl.attachShader(programa, sombreador(gl.VERTEX_SHADER, VERT));
     gl.attachShader(programa, sombreador(gl.FRAGMENT_SHADER, FRAG));
+    gl.bindAttribLocation(programa, 0, "p");
     gl.linkProgram(programa);
     if (!gl.getProgramParameter(programa, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(programa));
     gl.useProgram(programa);
     const buf = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, buf);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
-    const loc = gl.getAttribLocation(programa, "p");
-    gl.enableVertexAttribArray(loc);
-    gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+    gl.enableVertexAttribArray(0);
+    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
     return true;
   }
 
-  /** Pinta el campo para un toque en (x, y) y devuelve una URL de imagen ya decodificada. */
+  /** Pinta el campo para un toque en (x, y) y lo deja como imagen (PNG) en una URL blob:. */
   async function campo(x, y, ancho, alto, uR) {
     const w = Math.max(64, Math.round(ancho * RES_CAMPO)), h = Math.max(64, Math.round(alto * RES_CAMPO));
     lienzo.width = w; lienzo.height = h;
     gl.viewport(0, 0, w, h);
+    gl.useProgram(programa);
     const u = (n) => gl.getUniformLocation(programa, n);
     gl.uniform2f(u("uRes"), w, h);
     gl.uniform2f(u("uVista"), ancho, alto);
@@ -160,46 +167,50 @@
     gl.uniform1f(u("uEscala"), ESCALA_RUIDO);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     const blob = await new Promise((ok) => lienzo.toBlob(ok, "image/png"));
-    const url = URL.createObjectURL(blob);
-    const img = new Image(); img.src = url;
-    await img.decode();
-    return url;
+    if (!blob) throw new Error("sin imagen del campo");
+    return URL.createObjectURL(blob);
   }
 
-  // ------------------------------------------------------------------ 3. filtro SVG (umbral del campo)
-  let imagenCampo = null, matriz = null, matrizHumo = null;
-  function prepararFiltro() {
-    if (matriz?.isConnected) return;
-    const svg = document.createElementNS(SVGNS, "svg");
-    svg.setAttribute("aria-hidden", "true");
+  const SVGNS = "http://www.w3.org/2000/svg";
+  let mascara = null, imagen = null, matriz = null, matrizHumo = null;
+  function prepararMascara() {
+    if (mascara?.isConnected) return;
+    const el = (tag, attrs) => { const e = document.createElementNS(SVGNS, tag); for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v); return e; };
+    const svg = el("svg", { "aria-hidden": "true", width: "0", height: "0" });
     svg.style.cssText = "position:absolute;width:0;height:0;overflow:hidden;pointer-events:none";
-    const filtro = document.createElementNS(SVGNS, "filter");
-    filtro.id = "dm-tinta";
-    for (const [k, v] of Object.entries({ x: "0", y: "0", width: "1", height: "1", filterUnits: "objectBoundingBox", primitiveUnits: "userSpaceOnUse", "color-interpolation-filters": "sRGB" })) filtro.setAttribute(k, v);
-    imagenCampo = document.createElementNS(SVGNS, "feImage");
-    imagenCampo.setAttribute("preserveAspectRatio", "none");
-    imagenCampo.setAttribute("result", "campo");
-    matriz = document.createElementNS(SVGNS, "feColorMatrix");
-    matriz.setAttribute("in", "campo"); matriz.setAttribute("type", "matrix"); matriz.setAttribute("result", "mascara");
-    matrizHumo = document.createElementNS(SVGNS, "feColorMatrix");
-    matrizHumo.setAttribute("in", "campo"); matrizHumo.setAttribute("type", "matrix"); matrizHumo.setAttribute("result", "humo");
-    // unión: a + HUMO·h − HUMO·a·h
-    const union = document.createElementNS(SVGNS, "feComposite");
-    for (const [k, v] of Object.entries({ in: "mascara", in2: "humo", operator: "arithmetic", k1: String(-HUMO), k2: "1", k3: String(HUMO), k4: "0", result: "todo" })) union.setAttribute(k, v);
-    const comp = document.createElementNS(SVGNS, "feComposite");
-    comp.setAttribute("in", "SourceGraphic"); comp.setAttribute("in2", "todo"); comp.setAttribute("operator", "in");
-    filtro.append(imagenCampo, matriz, matrizHumo, union, comp);
-    svg.append(filtro);
+    const filtro = el("filter", { id: "dm-tinta", x: "0", y: "0", width: "1", height: "1", "color-interpolation-filters": "sRGB" });
+    matriz = el("feColorMatrix", { in: "SourceGraphic", type: "matrix", result: "tinta" });
+    matrizHumo = el("feColorMatrix", { in: "SourceGraphic", type: "matrix", result: "humo" });
+    // unión: a + HUMO·h − HUMO·a·h (en todos los canales; la máscara usa el alfa)
+    const union = el("feComposite", { in: "tinta", in2: "humo", operator: "arithmetic", k1: String(-HUMO), k2: "1", k3: String(HUMO), k4: "0" });
+    filtro.append(matriz, matrizHumo, union);
+    mascara = el("mask", { id: "dm-tinta-mascara", maskUnits: "userSpaceOnUse", maskContentUnits: "userSpaceOnUse", x: "0", y: "0", width: "100", height: "100" });
+    mascara.style.maskType = "alpha";
+    imagen = el("image", { x: "0", y: "0", width: "100", height: "100", preserveAspectRatio: "none", filter: "url(#dm-tinta)" });
+    mascara.append(imagen);
+    const defs = el("defs", {});
+    defs.append(filtro, mascara);
+    svg.append(defs);
     document.body.append(svg);
   }
 
-  /** Máscaras de tinta y de humo para un nivel (0 = tema viejo, 1 = tema nuevo). */
+  /** Umbral para un nivel de tinta (en unidades de campo): alfa 0 = tema viejo, 1 = tema nuevo. */
   function fijarNivel(nivel) {
     const s = (nivel - F0) / FR; // el nivel en las unidades de R y G
     const kf = FR / FRANJA, kv = CONTRASTE_VETAS, kh = FR / SUAVIDAD_HUMO;
-    // las tres primeras filas (color) dan igual: solo se usa el alfa
-    matriz.setAttribute("values", `0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  ${(-kf).toFixed(3)} 0 ${kv.toFixed(3)} 0 ${(kf * s - kv * 0.5).toFixed(4)}`);
-    matrizHumo.setAttribute("values", `0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 ${(-kh).toFixed(3)} 0 0 ${(kh * s).toFixed(4)}`);
+    matriz.setAttribute("values", `0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  ${(-kf).toFixed(3)} 0 ${kv.toFixed(3)} 0 ${(kf * s - kv * 0.5).toFixed(4)}`);
+    matrizHumo.setAttribute("values", `0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 ${(-kh).toFixed(3)} 0 0 ${(kh * s).toFixed(4)}`);
+  }
+
+  /** Carga el campo en la máscara (y espera a que la imagen esté lista). */
+  function cargarCampo(url, ancho, alto) {
+    for (const e of [mascara, imagen]) { e.setAttribute("width", String(ancho)); e.setAttribute("height", String(alto)); }
+    return new Promise((ok, mal) => {
+      const t = setTimeout(() => mal(new Error("el campo no carga")), 3000);
+      imagen.addEventListener("load", () => { clearTimeout(t); ok(); }, { once: true });
+      imagen.addEventListener("error", () => { clearTimeout(t); mal(new Error("el campo no carga")); }, { once: true });
+      imagen.setAttribute("href", url);
+    });
   }
 
   // ------------------------------------------------------------------ cambio
@@ -212,24 +223,24 @@
     const r = boton.getBoundingClientRect();
     const x = r.left + r.width / 2, y = r.top + r.height / 2;
     const uR = Math.hypot(Math.max(x, ancho - x), Math.max(y, alto - y));
-    let url;
+    let url = null;
     enCurso = true;
     try {
       if (!prepararGL()) throw new Error("sin WebGL2");
-      prepararFiltro();
+      prepararMascara();
+      fijarNivel(-1); // todo tema viejo hasta que empiece
       url = await campo(x, y, ancho, alto, uR);
+      await cargarCampo(url, ancho, alto);
     } catch {
+      if (url) URL.revokeObjectURL(url);
       enCurso = false; aplicar(siguiente); return;
     }
-    for (const [n, v] of Object.entries({ x: 0, y: 0, width: ancho, height: alto })) imagenCampo.setAttribute(n, String(v));
-    imagenCampo.setAttribute("href", url);
-    fijarNivel(-1); // todo tema viejo hasta que empiece
 
     raiz.classList.add("is-tema-vt");
     const vt = document.startViewTransition(() => aplicar(siguiente));
     let sosten = null, seguro = 0, cerrando = false;
-    // Final: primero TODO tema nuevo (sin islas sueltas), un fotograma así, y luego se acaba la
-    // transición. La clase is-tema-vt (filtro + sin fundido) se quita solo cuando ya no hay
+    // Final: primero TODO tema nuevo (máscara entera), un fotograma así, y luego se acaba la
+    // transición. La clase is-tema-vt (máscara + sin fundido) se quita solo cuando ya no hay
     // capturas: si se quita antes, el navegador mete su fundido por defecto y se ve un destello.
     const cerrar = () => {
       if (cerrando) return;
@@ -250,9 +261,11 @@
       seguro = setTimeout(cerrar, DURACION + 3000);
       const t0 = performance.now();
       const paso = () => {
+        if (cerrando) return;
         const x01 = Math.min(1, (performance.now() - t0) / DURACION);
+        if (x01 >= 1) { cerrar(); return; }
         fijarNivel(nivelEn(x01));
-        if (x01 < 1) requestAnimationFrame(paso); else cerrar();
+        requestAnimationFrame(paso);
       };
       paso();
     }).catch(cerrar);

@@ -28,11 +28,11 @@ html.dark .tema__bocado { cx: 17px; cy: 7px; transition-delay: .06s; }
 html.dark .tema__rayos { transform: rotate(-90deg) scale(.4); opacity: 0; transition-delay: 0s; }
 @media (prefers-reduced-motion: reduce) { .tema__astro, .tema__bocado, .tema__rayos { transition: none; } }
 
-/* la mancha de tinta: sin el fundido por defecto; la página nueva entra por el filtro #dm-tinta
-   (tema.js lo crea y mueve su umbral en cada fotograma) */
+/* la mancha de tinta: sin el fundido por defecto; la página nueva entra por la máscara SVG
+   #dm-tinta-mascara (tema.js la crea y mueve su umbral en cada fotograma) */
 html.is-tema-vt::view-transition-old(root),
 html.is-tema-vt::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
-html.is-tema-vt::view-transition-new(root) { z-index: 2; filter: url(#dm-tinta); }
+html.is-tema-vt::view-transition-new(root) { z-index: 2; mask: url(#dm-tinta-mascara); }
 
 /* ================================================================ modo oscuro */
 html.dark {
