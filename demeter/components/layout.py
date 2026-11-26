@@ -24,6 +24,7 @@ from typing import Literal
 
 import reflex as rx
 
+from demeter.components.tema import boton_tema
 from demeter.state.auth import AuthState
 from demeter.state.ui import UIState
 
@@ -81,6 +82,7 @@ def _barra_app(activa: str) -> list[rx.Component]:
     return [
         _marca(),
         rx.el.nav(*[_enlace(s, activa) for s in SECCIONES], class_name="bar__nav", aria_label="Secciones"),
+        boton_tema(),
         rx.el.a(
             rx.el.span(AuthState.inicial),
             AuthState.username,
@@ -96,12 +98,13 @@ def _barra_portada() -> list[rx.Component]:
     return [
         _marca("#top"),
         rx.el.nav(*[_enlace_portada(h, t) for h, t in ANCLAS_PORTADA], class_name="bar__nav", aria_label="Principal"),
+        boton_tema(),
         rx.el.button("Ver el panel en vivo", type="button", on_click=AuthState.ir_al_panel, class_name="bar__cta"),
     ]
 
 
 def _barra_acceso() -> list[rx.Component]:
-    return [_marca(), rx.el.a("Volver al inicio", href="/", class_name="bar__cta bar__cta--ghost")]
+    return [_marca(), boton_tema(), rx.el.a("Volver al inicio", href="/", class_name="bar__cta bar__cta--ghost")]
 
 
 def layout(*contenido: rx.Component, activa: str = "", barra: Barra = "app") -> rx.Component:
