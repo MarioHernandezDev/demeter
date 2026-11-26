@@ -4,7 +4,7 @@ import pytest
 import reflex as rx
 
 from demeter import theme
-from demeter.components import prototipo
+from demeter.components import prototipo, tema
 from demeter.components.layout import SECCIONES, layout
 from demeter.state.auth import HOME_AFTER_LOGIN, LOGIN_ROUTE, PUBLIC_ROUTES, destino_panel
 
@@ -62,6 +62,26 @@ def test_la_seccion_activa_lleva_aria_current():
     html = str(layout(rx.el.p("x"), activa="/alertas"))
     # Dos enlaces activos: el de la barra y el de la pestaña móvil.
     assert html.count('"page"') == 2
+
+
+def test_todas_las_paginas_tienen_el_boton_de_tema(paginas):
+    for nombre, html in paginas.items():
+        assert "bar__tema" in html and "data-tema" in html, nombre
+
+
+def test_el_tema_va_en_el_head_y_sus_archivos_existen():
+    assets = prototipo.PLANTILLAS.parent.parent.parent / "assets"
+    cabeza = " ".join(str(c) for c in tema.cabeza())
+    for ruta in (tema.HOJA, tema.SCRIPT):
+        assert ruta in cabeza
+        assert (assets / ruta.lstrip("/")).is_file(), ruta
+
+
+def test_la_paleta_oscura_cubre_las_variables_del_prototipo():
+    css = (prototipo.PLANTILLAS.parent.parent.parent / "assets" / "proto" / "tema.css").read_text()
+    oscuro = css[css.index("html.dark {") :]
+    for var in ("--ink", "--paper", "--muted", "--warn", "--off", "--dm-tinta", "--dm-papel", "--dm-sin-senal"):
+        assert f"{var}:" in oscuro, var
 
 
 def test_cada_pagina_del_prototipo_tiene_su_plantilla():
