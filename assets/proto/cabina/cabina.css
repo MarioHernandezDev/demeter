@@ -1,0 +1,172 @@
+/* Cabina de nave con ventanas (sección «mundos» de la portada). Paleta de Demeter: esmeralda, salvia y terracota. */
+.cab3 {
+  --cabin: #14493b; --cabin-hi: #1f6a55; --cabin-dark: #07261f;
+  --bezel: #cfe3cf; --bezel-2: #eef6e4;
+  --panel: #0a211b; --accent: #ff7b3d; --text: #fff; --btn-dark: #0b2a22;
+  --detail-top: #ffb685; --detail-mid: #f6dfc0; --detail-bottom: #4d8e65;
+  --curva: cubic-bezier(.65, 0, .15, 1);
+  position: relative; height: 100vh; height: 100svh; overflow: hidden; overflow: clip; /* clip: ni el foco ni scrollIntoView pueden desplazar la escena */
+  background: var(--cabin);
+  color: var(--text); touch-action: pan-y; outline: none; user-select: none; -webkit-user-select: none;
+}
+.cab3:focus-visible { outline: 3px solid var(--accent); outline-offset: -6px; }
+.cab3 button, .cab3 a { font: inherit; }
+.cab3 :focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+
+/* ---- escena y pared (con grano) */
+.cab3__escena { position: absolute; inset: 0; transform-origin: 50% 40%; will-change: transform; }
+.cab3__pared { position: absolute; inset: -4%; background:
+    radial-gradient(120% 90% at 50% 30%, var(--cabin-hi), var(--cabin) 55%, var(--cabin-dark) 120%); }
+.cab3__pared::before { content: ""; position: absolute; inset: 0; opacity: .5;
+  background:
+    linear-gradient(90deg, transparent calc(14% - 1px), rgba(0,0,0,.28) 14%, transparent calc(14% + 2px)),
+    linear-gradient(90deg, transparent calc(86% - 1px), rgba(0,0,0,.28) 86%, transparent calc(86% + 2px)),
+    linear-gradient(0deg, transparent calc(30% - 1px), rgba(255,255,255,.07) 30%, transparent calc(30% + 2px)); }
+.cab3__pared::after { content: ""; position: absolute; inset: 0; opacity: .06; mix-blend-mode: overlay; pointer-events: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 1 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>"); }
+
+.cab3__vista { position: absolute; inset: 0 0 25svh 0; will-change: transform; transform-origin: 50% 60%; }
+.cab3__escenario { position: absolute; inset: 0; perspective: 1600px; perspective-origin: 50% 50%; }
+.cab3__cilindro { position: absolute; inset: 0; transform-style: preserve-3d; }
+
+/* ---- ventana */
+.win { --w: min(55vw, 1100px); --h: min(64svh, 52vw);
+  position: absolute; left: 50%; top: 50%; width: var(--w); height: var(--h); margin: calc(var(--h) / -2) 0 0 calc(var(--w) / -2);
+  will-change: transform, opacity; backface-visibility: hidden; cursor: grab; }
+.cab3 .win:active { cursor: grabbing; }
+.win:not(.is-active) { cursor: pointer; }
+.win__frame { position: absolute; inset: 0; padding: clamp(10px, 1.3vw, 22px); border-radius: 12% / 16%;
+  background: linear-gradient(160deg, var(--bezel-2), var(--bezel) 60%, #b9d3bd);
+  border: 3px solid var(--cabin-dark);
+  box-shadow: 0 0 0 clamp(5px, .75vw, 12px) rgba(238, 246, 228, .2), 0 0 0 clamp(6px, .9vw, 14px) rgba(7, 38, 31, .55), 0 40px 80px rgba(0, 0, 0, .35); }
+.win__glass { position: relative; width: 100%; height: 100%; border-radius: 10% / 14%; overflow: hidden; border: 3px solid var(--cabin-dark);
+  background: #4f7a6c; container-type: inline-size; isolation: isolate; }
+.win__bevel { position: absolute; inset: clamp(10px, 1.3vw, 22px); border-radius: 10% / 14%; pointer-events: none;
+  box-shadow: inset 0 0 0 1.5px rgba(7, 38, 31, .6), inset 0 10px 40px rgba(0, 0, 0, .35), inset 0 -6px 24px rgba(0, 0, 0, .25); }
+
+/* capas del mundo (el parallax las mueve en X) */
+.lyr { position: absolute; top: 0; bottom: 0; left: -30%; width: 160%; will-change: transform; pointer-events: none; }
+.lyr--photo img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.lyr--far svg, .lyr--near svg { position: absolute; left: 0; bottom: 0; width: 100%; display: block; }
+.lyr--fx svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.win--velo .win__shade::after { content: ""; position: absolute; inset: 0;
+  background: radial-gradient(ellipse 50% 28% at 50% 44%, rgba(4, 20, 16, calc(var(--velo) * .9)) 0%, rgba(4, 20, 16, calc(var(--velo) * .5)) 55%, transparent 100%);
+  -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
+  -webkit-mask-image: radial-gradient(ellipse 50% 28% at 50% 44%, #000 30%, transparent 100%); mask-image: radial-gradient(ellipse 50% 28% at 50% 44%, #000 30%, transparent 100%); }
+.win__shade { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(5, 25, 20, .38), rgba(5, 25, 20, .05) 42%, rgba(5, 25, 20, .45)); }
+.star { animation: titila 4s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+@keyframes titila { 0%, 100% { opacity: .15; transform: translateY(0) scale(.8); } 50% { opacity: .95; transform: translateY(-9px) scale(1.15); } }
+.const { stroke-width: 1.6; stroke-dasharray: 8 9; opacity: .55; animation: traza 6s linear infinite; }
+.const-dot { opacity: .8; }
+@keyframes traza { to { stroke-dashoffset: -34; } }
+
+/* texto: centrado en la ventana, escala con el ancho de la ventana (nunca se pisa) */
+.win__text { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 2.2cqw; text-align: center; padding: 0 7cqw 13cqw; }
+.win__title { margin: 0; font-family: "Mona Sans", system-ui, sans-serif; font-weight: 600; letter-spacing: -.03em; line-height: .95;
+  font-size: clamp(40px, 12.5cqw, 128px); color: var(--text); text-shadow: 0 2px 30px rgba(0, 0, 0, .3); overflow-wrap: anywhere; }
+.win__sub { margin: 0; max-width: 34ch; font-size: clamp(13px, 2.4cqw, 17px); font-weight: 500; line-height: 1.4; color: rgba(255, 255, 255, .94); text-shadow: 0 1px 14px rgba(0, 0, 0, .35); }
+.win__cta { position: absolute; z-index: 2; left: 0; right: 0; margin-inline: auto; width: fit-content; bottom: 7cqw; padding: 12px 18px; border: 0; border-radius: 10px;
+  background: var(--btn-dark); color: #fff; font-weight: 600; font-size: 15px; cursor: pointer;
+  transition: transform .25s var(--curva), background-color .25s ease; }
+.win__cta:hover { transform: scale(1.04); background: #1b4a3c; }
+.win__cta:active { transform: scale(.98); }
+.win:not(.is-active) .win__title, .win:not(.is-active) .win__sub, .win:not(.is-active) .win__cta { opacity: 0; visibility: hidden; }
+
+/* ---- consola inferior (fija: no gira con el cilindro) */
+.cab3__console { position: absolute; left: 0; right: 0; bottom: 0; height: 27svh; will-change: transform; }
+.cab3__consola-vista { position: absolute; inset: 0; will-change: transform; }
+.hud { position: absolute; top: 12%; bottom: -6%; background: var(--panel); border-radius: 30px 30px 0 0; overflow: hidden;
+  border: 3px solid #1d5545; border-bottom: 0;
+  background-image: linear-gradient(rgba(160, 230, 200, .07) 1px, transparent 1px), linear-gradient(90deg, rgba(160, 230, 200, .07) 1px, transparent 1px);
+  background-size: 26px 26px; box-shadow: inset 0 14px 40px rgba(0, 0, 0, .45); }
+.hud--l { left: -5%; width: 33%; transform: perspective(900px) rotateY(16deg); transform-origin: right center; }
+.hud--r { right: -5%; width: 33%; transform: perspective(900px) rotateY(-16deg); transform-origin: left center; }
+.hud--c { left: 33.5%; width: 33%; top: 6%; display: grid; align-content: start; justify-items: center; gap: 1.1svh; padding-top: 2.6svh; }
+.hud svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.hud--c svg { position: static; width: auto; height: auto; }
+.hud__curva { fill: none; stroke: rgba(160, 230, 200, .35); stroke-width: 1.6; }
+.hud__curva--2 { stroke: rgba(160, 230, 200, .18); }
+.hud__radar { fill: none; stroke: rgba(160, 230, 200, .28); stroke-width: 1.4; }
+.hud__punto { fill: var(--accent); filter: drop-shadow(0 0 8px var(--accent)); animation: late 2.4s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+.hud__punto--2 { animation-delay: -1.2s; }
+@keyframes late { 0%, 100% { opacity: .55; transform: scale(.8); } 50% { opacity: 1; transform: scale(1.4); } }
+.hud__hint { margin: 0; font-size: clamp(12px, 1.05vw, 15px); color: rgba(219, 238, 230, .72); }
+.hud__nav { display: flex; align-items: center; gap: 14px; }
+.hud__flecha { width: 38px; height: 38px; display: grid; place-items: center; border-radius: 50%; cursor: pointer; background: transparent; color: #fff;
+  border: 1px solid rgba(219, 238, 230, .3); transition: background-color .25s ease, transform .2s var(--curva); }
+.hud__flecha:hover { background: rgba(219, 238, 230, .14); }
+.hud__flecha:active { transform: scale(.94); }
+.hud__flecha:disabled { opacity: .3; cursor: default; pointer-events: none; }
+.hud__flecha svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.hud__dots { display: flex; gap: 6px; }
+.hud__dot { width: 22px; height: 22px; padding: 0; border: 0; background: transparent; cursor: pointer; display: grid; place-items: center; }
+.hud__dot::before { content: ""; width: 8px; height: 8px; border-radius: 99px; background: #fff; opacity: .4; transition: opacity .6s var(--curva), transform .6s var(--curva); }
+.hud__dot.is-on::before { opacity: 1; transform: scale(1.25); }
+.hud__read { margin: 0; min-height: 1.3em; color: var(--accent); font-size: clamp(11px, .95vw, 13px); text-align: center; }
+
+/* ---- detalle («Explorar») */
+.cab3__detail { position: absolute; inset: 0; z-index: 5; display: grid; place-content: center; justify-items: center; gap: 22px; padding: 24px 16px; visibility: hidden;
+  background: linear-gradient(180deg, var(--detail-top), var(--detail-mid) 52%, var(--detail-bottom));
+  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); user-select: text; }
+.cab3__card { width: min(340px, 88vw); background: #fff; color: #12181a; border-radius: 14px; overflow: hidden; box-shadow: 0 30px 70px rgba(7, 38, 31, .3); }
+.cab3__card img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; }
+.cab3__card-body { padding: 20px 20px 22px; display: grid; gap: 10px; }
+.cab3__card h3 { margin: 0; font-size: 24px; font-weight: 600; letter-spacing: -.02em; line-height: 1.15; }
+.cab3__card p { margin: 0; font-size: 15px; line-height: 1.5; color: #56626a; }
+.cab3__ver { justify-self: start; margin-top: 6px; padding: 12px 18px; border-radius: 10px; background: var(--btn-dark); color: #fff; font-weight: 600; text-decoration: none;
+  transition: transform .25s var(--curva), background-color .25s ease; }
+.cab3__ver:hover { transform: scale(1.04); background: #1b4a3c; }
+.cab3__volver { padding: 10px 16px; border-radius: 99px; border: 1px solid rgba(7, 38, 31, .35); background: rgba(255, 255, 255, .35); color: #07261f; font-weight: 600; cursor: pointer;
+  transition: background-color .25s ease; }
+.cab3__volver:hover { background: rgba(255, 255, 255, .6); }
+
+/* ---- móvil / tablet vertical */
+@media (max-width: 760px) {
+  .win { --w: 88vw; --h: min(60svh, 130vw); }
+  .cab3__vista { inset: 0 0 20svh 0; }
+  .cab3__console { height: 22svh; }
+  .hud--l, .hud--r { display: none; }
+  .hud--c { left: 5%; width: 90%; top: 14%; gap: .8svh; padding-top: 1.6svh; }
+  .hud__hint { display: none; }
+  .win__sub { font-size: 14px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .star, .const, .hud__punto { animation: none; }
+  .win__cta, .hud__flecha, .cab3__ver { transition: none; }
+}
+
+/* la barra superior se lee en blanco sobre la pared de la cabina */
+html.in-cab3 .bar { color: #fff; }
+html.in-cab3 .bar__nav a { border-color: rgba(255,255,255,.5); background: rgba(255,255,255,.1); }
+html.in-cab3 .bar__cta { background: #fff; color: #0b2a22; border-color: #fff; }
+
+
+/* ================================================================ versión WebGL (demeter/components/cabina3d.jsx) */
+.cab3__gl, .cab3__rotulos { position: absolute; inset: 0; }
+.cab3__gl canvas { display: block; width: 100%; height: 100%; }
+.cab3:not(.cab3--gl) .cab3__gl, .cab3:not(.cab3--gl) .cab3__rotulos { display: none; }
+.cab3--gl .cab3__vista, .cab3--gl .cab3__pared { display: none; } /* la pared y las ventanas las pinta WebGL */
+.cab3--gl { cursor: grab; }
+.cab3--gl:active { cursor: grabbing; }
+.cab3__rotulos { pointer-events: none; overflow: hidden; overflow: clip; }
+.rotulo .win__sub { text-shadow: 0 1px 2px rgba(0, 0, 0, .55), 0 2px 18px rgba(0, 0, 0, .45); }
+.rotulo { position: absolute; left: 0; top: 0; container-type: inline-size; will-change: transform, opacity; visibility: hidden; }
+.rotulo .win__cta { pointer-events: auto; }
+.rotulo:not(.is-active) .win__cta { pointer-events: none; }
+
+/* «Explorar»: la cámara sale de la cabina, fundido al degradado y la tarjeta entra escalonada */
+.cab3--gl .cab3__escena { transition: transform .6s cubic-bezier(.65,0,.35,1), opacity .4s ease .35s; }
+.cab3--gl .cab3__console { transition: transform .5s cubic-bezier(.23,1,.32,1), opacity .5s ease; }
+.cab3--gl .cab3__detail { opacity: 0; visibility: hidden; transition: opacity .35s ease, visibility 0s linear .35s; }
+.cab3--gl .cab3__detail img, .cab3--gl .cab3__detail h3, .cab3--gl .cab3__detail p, .cab3--gl .cab3__ver, .cab3--gl .cab3__volver {
+  opacity: 0; transform: translateY(16px); transition: opacity .25s ease, transform .25s ease; }
+.cab3--gl.is-detalle .cab3__escena { transform: translateY(-15%) scale(1.08); opacity: 0; }
+.cab3--gl.is-detalle .cab3__console { transform: translateY(130%); opacity: 0; }
+.cab3--gl.is-detalle .cab3__detail { opacity: 1; visibility: visible; transition: opacity .5s ease .3s, visibility 0s; }
+.cab3--gl.is-detalle .cab3__detail img, .cab3--gl.is-detalle .cab3__detail h3, .cab3--gl.is-detalle .cab3__detail p,
+.cab3--gl.is-detalle .cab3__ver, .cab3--gl.is-detalle .cab3__volver { opacity: 1; transform: none; transition: opacity .5s cubic-bezier(.23,1,.32,1), transform .5s cubic-bezier(.23,1,.32,1); }
+.cab3--gl.is-detalle .cab3__detail img { transition-delay: .75s; }
+.cab3--gl.is-detalle .cab3__detail h3 { transition-delay: .95s; }
+.cab3--gl.is-detalle .cab3__detail p { transition-delay: 1.07s; }
+.cab3--gl.is-detalle .cab3__ver { transition-delay: 1.19s; }
+.cab3--gl.is-detalle .cab3__volver { transition-delay: 1.35s; }
