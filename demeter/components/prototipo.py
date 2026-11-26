@@ -74,3 +74,34 @@ def contenido(
         rx.html(plantilla(nombre), class_name="proto"),
         preparar(clase_body, niebla, scripts),
     )
+
+
+def contenido_con_centro(
+    nombre: str,
+    marcador: str,
+    centro: rx.Component,
+    clase_body: str,
+    niebla: bool = True,
+    scripts: tuple[str, ...] = ("app.js", "mascota.js"),
+    app: bool = True,
+) -> rx.Component:
+    """Como :func:`contenido`, pero mete un componente Reflex en el sitio del ``marcador``.
+
+    La plantilla empieza por ``<main id="top">`` y acaba en ``</main>``: el ``<main>`` lo pone
+    Reflex y dentro van el HTML de antes del marcador, el componente y el HTML de después.
+    """
+    html = plantilla(nombre).strip()
+    apertura, cierre = '<main id="top">', "</main>"
+    if not (html.startswith(apertura) and html.endswith(cierre)):
+        msg = f"La plantilla {nombre!r} debe ir envuelta en {apertura}…{cierre}"
+        raise ValueError(msg)
+    cuerpo = html[len(apertura) : -len(cierre)]
+    if marcador not in cuerpo:
+        msg = f"La plantilla {nombre!r} no tiene el marcador {marcador!r}"
+        raise ValueError(msg)
+    antes, despues = cuerpo.split(marcador, 1)
+    return rx.fragment(
+        *hojas(app),
+        rx.el.div(rx.el.main(rx.html(antes), centro, rx.html(despues), id="top"), class_name="proto"),
+        preparar(clase_body, niebla, scripts),
+    )

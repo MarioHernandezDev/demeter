@@ -64,6 +64,9 @@ Se cargan desde Google Fonts (`theme.GOOGLE_FONTS`); si no hay red, caen a las f
 | Contenido de cada pantalla | `demeter/pages/plantillas/*.html` | Maqueta del prototipo con datos de ejemplo, insertada con `prototipo.contenido()`. |
 | Modo oscuro | `demeter/components/tema.py` + `assets/proto/tema.css` y `tema.js` | Botón sol/luna de la barra y lo que va en el `<head>` de todas las páginas (`tema.cabeza()`, desde `demeter/demeter.py`). |
 | Estilos, scripts e imágenes | `assets/proto/` | `proto.css`, `app.css` y `mascota.css`; `intro.js` (portada: niebla y bancal en líneas con Three.js), `twin.js` (gemelo 3D del panel), `app.js` (gráficas, mapa, alertas y umbrales de ejemplo) y `mascota.js` (Demetreo griego: pie, aviso y 404). |
+| Cabina de los mundos (portada) | `demeter/components/cabina3d.py` + `assets/cabina3d/cabina3d.jsx` | Componente React con three.js (dependencia npm, va empaquetada). Cabina de nave que gira con una ventana por mundo, paralaje por profundidad y postprocesado (dithering, grano, viñeta). Datos en `assets/proto/cabina/mundos.json`. Sin WebGL, si la escena falla o con «reducir movimiento», usa la versión CSS de `assets/proto/cabina/` (GSAP desde cdnjs). Se mete en `inicio.html` con `prototipo.contenido_con_centro()` en el marcador `@mundos`. |
+| Gemelo con scroll (portada) | `assets/proto/scroll-split.js` + `.ss` en `proto.css` | Bancal en terrazas con three.js (copiado en `assets/proto/vendor/`, sin CDN) que al bajar se parte en tres paneles y se dan la vuelta: medir, avisar y regar. Se pausa fuera de pantalla. |
+| Cambio de página | `proto.css` (`dm-enter`) | Cada pantalla entra desenfocada y se enfoca en 0,55 s. |
 
 **Cómo se sustituye una plantilla:** la rama de cada pantalla (por ejemplo `feature/dashboard-graficas` en el panel) rehace su contenido con componentes Reflex y datos de la API, borra su `.html` de `plantillas/` y deja de llamar a `prototipo.contenido()`. La barra y las pestañas no se tocan.
 

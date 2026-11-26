@@ -1,0 +1,115 @@
+[
+  {
+    "id": "medir",
+    "titulo": "Medir",
+    "sub": "Temperatura, agua del suelo y luz de cada parcela, en tiempo real",
+    "pregunta": "¿Cuánta agua tiene hoy cada parcela?",
+    "texto": "Cada sensor manda su lectura cada pocos minutos. Mira el panel y verás el estado de toda la finca de un vistazo.",
+    "cta": "Ver el panel",
+    "href": "/dashboard",
+    "img": "/proto/img/mundos/medir.webp",
+    "alt": "Invernaderos de Carchuna junto al mar al amanecer",
+    "lectura": "Invernadero 2 · Carchuna · aire 27,4 ºC",
+    "colores": {
+      "lejos": "#8fb3c4",
+      "cerca": "#1d5a4c",
+      "particula": "#ffd9b0"
+    }
+  },
+  {
+    "id": "avisar",
+    "titulo": "Avisar",
+    "sub": "Una alerta en cuanto un valor sale de su umbral",
+    "pregunta": "¿Y si el suelo se seca de madrugada?",
+    "texto": "Define un mínimo y un máximo por sensor. Cuando una lectura se sale, te llega el aviso antes de que lo note el cultivo.",
+    "cta": "Ver las alertas",
+    "href": "/alertas",
+    "img": "/proto/img/mundos/avisar.webp",
+    "alt": "Aguacates en bancales bajo un cielo azul",
+    "lectura": "Bancal 3 · Almuñécar · suelo 19 % · LOW",
+    "colores": {
+      "lejos": "#86b6e6",
+      "cerca": "#2c6e3f",
+      "particula": "#ffffff"
+    },
+    "constelacion": [
+      [
+        14,
+        22
+      ],
+      [
+        26,
+        12
+      ],
+      [
+        38,
+        24
+      ],
+      [
+        50,
+        14
+      ],
+      [
+        63,
+        26
+      ]
+    ]
+  },
+  {
+    "id": "regar",
+    "titulo": "Regar",
+    "sub": "El agua baja de Sierra Nevada: riega solo lo que pide el suelo",
+    "pregunta": "¿Qué parcela necesita agua ahora?",
+    "texto": "Demeter cruza la humedad real con la previsión y te propone cuándo y cuánto regar cada parcela.",
+    "cta": "Ver las parcelas",
+    "href": "/parcelas",
+    "img": "/proto/img/mundos/regar.webp",
+    "alt": "Sierra Nevada nevada al amanecer",
+    "lectura": "Propuesta · 25 min antes de las 11:00",
+    "colores": {
+      "lejos": "#d3e0ec",
+      "cerca": "#3b6384",
+      "particula": "#ffffff"
+    }
+  },
+  {
+    "id": "gemelo",
+    "titulo": "Gemelo",
+    "sub": "Cada bancal en 3D, con sus sensores en su sitio",
+    "pregunta": "¿Dónde está exactamente cada sensor?",
+    "texto": "El gemelo digital reproduce tu bancal en tres dimensiones: terrazas, aguacates y sensores colocados donde están de verdad.",
+    "cta": "Ver el gemelo",
+    "href": "/dashboard",
+    "img": "/proto/img/mundos/gemelo.webp",
+    "alt": "Maqueta en líneas del Bancal 3 con sus sensores",
+    "lectura": "6 sensores · 3 terrazas · 42 aguacates",
+    "colores": {
+      "lejos": "#86a897",
+      "cerca": "#16423a",
+      "particula": "#9ff0c4"
+    },
+    "velo": 0.55,
+    "constelacion": [
+      [
+        18,
+        30
+      ],
+      [
+        30,
+        18
+      ],
+      [
+        44,
+        28
+      ],
+      [
+        58,
+        16
+      ],
+      [
+        72,
+        26
+      ]
+    ]
+  }
+]
