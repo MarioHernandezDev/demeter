@@ -172,6 +172,13 @@ html.in-cockpit .bar__cta { background: #0e2231; color: #fff; border-color: #0e2
   -webkit-mask-image: linear-gradient(to bottom, #000 38%, rgba(0,0,0,.55) 62%, transparent 96%);
   mask-image: linear-gradient(to bottom, #000 38%, rgba(0,0,0,.55) 62%, transparent 96%); }
 
+/* ---------------------------------------------------------------- cambio de página: entra desenfocada y se enfoca */
+@keyframes dm-enter { from { opacity: 0; filter: blur(14px); transform: scale(1.012); } to { opacity: 1; filter: none; transform: none; } }
+/* al final, filter y transform en «none»: cualquier otro valor haría que los position: fixed de
+   dentro (mascota, toasts) se colocaran respecto a .proto y no a la ventana */
+.dm-shell > .proto { animation: dm-enter .55s var(--ease) both; }
+@media (prefers-reduced-motion: reduce) { .dm-shell > .proto { animation: none; } }
+
 /* ---------------------------------------------------------------- gemelo 3D: pantalla completa, se parte y se da la vuelta */
 .ss { --ss: 0; position: relative; height: 230vh; background: #0d1214; color: #fff; }
 .ss__sticky { position: sticky; top: 0; height: 100vh; height: 100dvh; overflow: hidden; padding: calc(var(--split, 0) * 22px); }
