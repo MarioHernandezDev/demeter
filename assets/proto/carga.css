@@ -1,0 +1,55 @@
+/* Demeter · pantalla de carga: un aguacate que gira sobre sí mismo.
+   Está hecho con pseudo-elementos de <html> para que se vea desde el primer pintado, antes de
+   que cargue JavaScript:
+     html::before  el fondo (color del tema), la sombra en el suelo y el texto «Cargando»
+     html::after   el aguacate: gira en Y como una moneda y, cuando queda de canto, cambia de
+                   cara (pulpa con hueso ⇄ piel)
+   carga.js pone `dm-listo` en <html> cuando la página está lista (y la quita al navegar si la
+   nueva tarda). Dibujos: assets/proto/img/carga/. */
+
+html {
+  --carga-fondo: #eceeed; --carga-texto: #56626a; --carga-sombra: rgba(18, 24, 26, .16);
+  --carga-frente: url("/proto/img/carga/aguacate-frente.svg");
+  --carga-dorso: url("/proto/img/carga/aguacate-dorso.svg");
+}
+html.dark { --carga-fondo: #0e1315; --carga-texto: #95a3a9; --carga-sombra: rgba(0, 0, 0, .5); }
+
+html::before, html::after {
+  position: fixed; z-index: 2147483000; pointer-events: auto;
+  opacity: 1; visibility: visible;
+  transition: opacity .2s ease, visibility 0s;
+}
+html::before {
+  content: "Cargando"; inset: 0; display: grid; place-items: center; padding-top: 150px;
+  background: radial-gradient(38px 7px at 50% calc(50% + 52px), var(--carga-sombra), transparent) var(--carga-fondo);
+  color: var(--carga-texto); font: 500 11px/1 "Geist Mono", ui-monospace, monospace; letter-spacing: .14em; text-transform: uppercase;
+}
+html::after {
+  content: ""; left: 50%; top: 50%; width: 76px; height: 96px; margin: -66px 0 0 -38px;
+  background: var(--carga-frente) center / contain no-repeat;
+  transform: perspective(420px) rotateY(0deg);
+  animation: dm-carga-giro 1.5s linear infinite, dm-carga-bote .75s cubic-bezier(.45, 0, .55, 1) infinite alternate;
+}
+/* giro constante; la cara cambia de canto (90° y 270°), así no se ve el cambio */
+@keyframes dm-carga-giro {
+  0% { transform: perspective(420px) rotateY(0deg); background-image: var(--carga-frente); }
+  24.9% { background-image: var(--carga-frente); }
+  25% { background-image: var(--carga-dorso); }
+  74.9% { background-image: var(--carga-dorso); }
+  75% { background-image: var(--carga-frente); }
+  100% { transform: perspective(420px) rotateY(360deg); background-image: var(--carga-frente); }
+}
+@keyframes dm-carga-bote { from { translate: 0 3px; } to { translate: 0 -7px; } }
+
+/* lista: se desvanece y deja de girar */
+html.dm-listo::before, html.dm-listo::after {
+  opacity: 0; visibility: hidden; pointer-events: none;
+  transition: opacity .35s ease, visibility 0s .35s;
+}
+html.dm-listo::after { animation-play-state: paused; }
+
+@media (prefers-reduced-motion: reduce) {
+  html::after { animation: dm-carga-latido 1.6s ease-in-out infinite alternate; }
+  @keyframes dm-carga-latido { from { opacity: .55; } to { opacity: 1; } }
+  html.dm-listo::after { animation: none; } /* si no, el latido mandaría sobre opacity: 0 */
+}

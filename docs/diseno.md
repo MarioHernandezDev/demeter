@@ -47,6 +47,15 @@ El estado es el modo de color de Reflex: clase `dark` en `<html>` y `localStorag
 | `--dm-ok-texto` | `#5cc795` | texto «en rango» | 9,0:1 |
 | `--off` / `--dm-sin-senal` | `#7d8b91` | **solo** punto, borde y mini histórico sin señal | 5,3:1 |
 
+## Pantalla de carga
+
+Demetreo, el aguacate, gira como una moneda y cambia de cara de canto (pulpa con hueso ⇄ piel), con su sombra y el texto «Cargando». Va en el `<head>` de todas las páginas (`tema.cabeza()`).
+
+- `assets/proto/carga.css`: pseudo-elementos de `<html>` (`::before` fondo, sombra y texto; `::after` el aguacate), así se ve desde el primer pintado, sin JavaScript. Tiene versión oscura; con «reducir movimiento» solo late.
+- `assets/proto/carga.js`: pone `dm-listo` en `<html>` cuando la página está pintada (`.dm-shell`), los scripts del prototipo han terminado (`prototipo.py` marca `<html data-dm-scripts>` mientras cargan), las fuentes están y el documento ha cargado.
+- Tiempos: al abrir la web se ve como mínimo 700 ms; al navegar dentro de la app solo sale si la página nueva tarda más de 180 ms; nunca pasa de 8 s.
+- Dibujos: `assets/proto/img/carga/aguacate-frente.svg` y `aguacate-dorso.svg`.
+
 ## Tipografía
 
 - **Mona Sans** (variable, ancho 75–125): interfaz. El nombre «DEMETER» de la portada va en ancho 75 %.

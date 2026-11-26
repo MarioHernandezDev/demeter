@@ -69,10 +69,10 @@ def test_todas_las_paginas_tienen_el_boton_de_tema(paginas):
         assert "bar__tema" in html and "data-tema" in html, nombre
 
 
-def test_el_tema_va_en_el_head_y_sus_archivos_existen():
+def test_el_tema_y_la_carga_van_en_el_head_y_sus_archivos_existen():
     assets = prototipo.PLANTILLAS.parent.parent.parent / "assets"
     cabeza = " ".join(str(c) for c in tema.cabeza())
-    for ruta in (tema.HOJA, tema.SCRIPT):
+    for ruta in (tema.HOJA, tema.SCRIPT, "/proto/carga.css", "/proto/carga.js", "/proto/img/carga/aguacate-frente.svg"):
         assert ruta in cabeza
         assert (assets / ruta.lstrip("/")).is_file(), ruta
 
