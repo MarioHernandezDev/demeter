@@ -48,8 +48,8 @@ usuarios (seed, #14) los usuarios son los de ejemplo, en `demeter/api/auth.py` (
 | POST `/api/auth/login` · GET `/api/auth/me` | — · cualquiera | Sesión |
 | GET/POST `/api/users` · PATCH `/api/users/{id}` | admin | Gestión de usuarios |
 | GET `/api/parcels` · `/api/parcels/{id}` | lector | Parcelas (`?include_inactive=true` solo admin) |
-| PATCH `/api/parcels/{id}` | admin | Dar de baja o reactivar (`{"is_active": false}`), con todos sus sensores |
-| PUT `/api/parcels/{id}/boundary` | tecnico | Contorno dibujado (calcula m²) |
+| PATCH `/api/parcels/{id}` | admin | Dar de baja o reactivar (`{"is_active": false}`), con todos sus sensores. **409** al reactivarla si otra parcela activa del mismo propietario ya usa su nombre |
+| PUT `/api/parcels/{id}/boundary` | tecnico | Contorno dibujado (calcula m²). 409 si está de baja; 422 si el contorno no es válido o el repositorio lo rechaza (contorno y superficie van juntos, rangos) |
 | GET `/api/parcels/{id}/sensors` | lector | Sensores (los de baja solo los ve admin o tecnico) |
 | PATCH `/api/sensors/{id}` | tecnico (umbrales: admin) | Umbrales / colocar en el mapa / activar. Solo cambia lo enviado; `null` vacía el campo; el mínimo debe ser menor que el máximo |
 | GET `/api/sensors/{id}/data?limit&since` | lector | Lecturas de la BD, de antigua a reciente (un lector no ve las de un sensor de baja) |
