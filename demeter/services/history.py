@@ -76,6 +76,40 @@ def aggregate(sensor_id: str, range_: str, now: Optional[datetime] = None) -> tu
     return since, until, step, buckets
 
 
+def readings_between(
+    sensor_id: str,
+    start: Optional[datetime] = None,
+    end: Optional[datetime] = None,
+    since: Optional[datetime] = None,
+    limit: int = 100,
+) -> list[tuple[datetime, float]]:
+    """Lecturas ``(fecha, valor)`` de un sensor, de la más antigua a la más reciente.
+
+    - ``start``: desde esa fecha, **incluida**. ``end``: hasta esa fecha, **incluida**.
+    - ``since``: solo las POSTERIORES a esa fecha (excluida), para quien pregunta cada pocos segundos
+      con la fecha de la última que ya tiene.
+    - Si hay más de ``limit``, se quedan las ``limit`` MÁS RECIENTES de la ventana (no las más
+      antiguas), pero se devuelven en orden cronológico, que es lo que necesita una gráfica.
+    Las fechas sin zona horaria se toman como UTC.
+    """
+    if limit <= 0:
+        return []
+    query = select(SensorData.recorded_at, SensorData.value).where(SensorData.sensor_id == sensor_id)
+    if start is not None:
+        query = query.where(SensorData.recorded_at >= _utc(start))
+    if end is not None:
+        query = query.where(SensorData.recorded_at <= _utc(end))
+    if since is not None:
+        query = query.where(SensorData.recorded_at > _utc(since))
+    with conexion.open_session() as session:
+        rows = session.exec(query.order_by(SensorData.recorded_at.desc()).limit(limit)).all()
+    return [(_utc(when), value) for when, value in reversed(rows)]
+
+
+def _utc(value: datetime) -> datetime:
+    return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
+
+
 def summarize(buckets: list[Bucket]) -> Optional[Bucket]:
     """Mínimo, media y máximo de todo el rango (``start`` es el del primer tramo). ``None`` sin datos."""
     if not buckets:
