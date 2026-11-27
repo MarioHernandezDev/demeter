@@ -57,12 +57,13 @@ usuario que solo entra con Google no tiene contraseña: con contraseña siempre 
 | PUT `/api/parcels/{id}/boundary` | tecnico | Contorno dibujado (calcula m²). 409 si está de baja; 422 si el contorno no es válido o el repositorio lo rechaza (contorno y superficie van juntos, rangos) |
 | GET `/api/parcels/{id}/sensors` | lector | Sensores (los de baja solo los ve admin o tecnico) |
 | PATCH `/api/sensors/{id}` | tecnico (umbrales: admin) | Umbrales / colocar en el mapa / activar. Solo cambia lo enviado; `null` vacía el campo; el mínimo debe ser menor que el máximo |
-| GET `/api/sensors/{id}/data?limit&since` | lector | Lecturas de la BD, de antigua a reciente (un lector no ve las de un sensor de baja) |
+| GET `/api/sensors/{id}/data?from&to&since&limit` | lector | Lecturas de la BD, de antigua a reciente. `from` y `to` (ISO 8601, **ambas incluidas**; sin zona = UTC; `from` > `to` da 422) y/o `since` (excluida). Con más de `limit` (1–1000, 100 por defecto) salen las más recientes de la ventana. Un lector no ve las de un sensor de baja |
 | GET `/api/sensors/{id}/history?range=24h\|7d\|30d` | lector | Histórico **agregado** para las gráficas: por tramo (10 min, 1 h o 6 h, alineados al reloj) mínimo, media, máximo y nº de lecturas, de antiguo a reciente, **sin los tramos vacíos** (un hueco es un hueco en los datos). Trae `summary` del rango (`min`, `avg`, `max`, `count`; `null` sin datos) y los umbrales, para enseñar «cómo fue la semana» junto a los límites. Sobre 600 000 lecturas tarda unos 45 ms |
-| POST `/api/sensors/{id}/data` | `X-API-Key` | Ingesta en vivo. `timestamp` opcional (si falta, hora de llegada; si viene, entre 24 h atrás y 5 min por delante, o 422). Repetida: `stored=false, duplicate=true`. Guarda la lectura y evalúa las alertas en una sola transacción; una lectura atrasada o de un sensor de baja se guarda pero no alerta |
-| POST `/api/sensors/{id}/data/batch` | `X-API-Key` | Carga de histórico: `{"readings": [{timestamp, value}, …]}`, 1 a 1000 por llamada, todo o nada, horas de 2000 en adelante. **No genera alertas**. Devuelve `received`, `stored`, `duplicates` |
+| POST `/api/sensors/{id}/data` | `X-API-Key` | Ingesta en vivo. `timestamp` opcional (si falta, hora de llegada; si viene, entre 24 h atrás y 5 min por delante, o 422). Repetida: `stored=false, duplicate=true`. Guarda la lectura y evalúa las alertas en una sola transacción; una lectura atrasada o de un sensor de baja se guarda pero no alerta. **El valor debe estar dentro del rango físico del tipo** (422 si no y no se guarda nada): temperatura -50 a 100 ºC; humedad del suelo y del ambiente y nivel de depósito 0 a 100 %; luminosidad 0 a 200 klx. Tras guardar, avisa por WebSocket (`/ws/parcels/{id}`) |
+| POST `/api/sensors/{id}/data/batch` | `X-API-Key` | Carga de histórico: `{"readings": [{timestamp, value}, …]}`, 1 a 1000 por llamada, todo o nada, horas de 2000 en adelante. **No genera alertas**. Devuelve `received`, `stored`, `duplicates`. Una sola lectura fuera del rango físico rechaza todo el lote (422). No avisa por WebSocket |
 | GET `/api/dashboard?parcel_id=` | lector | Desde la BD: por sensor, último valor, `status` (`ok`/`LOW`/`HIGH`/`offline`/`sin_datos`) y `recent` (últimos 20 valores); las 5 alertas más recientes (activas primero); `unread_alerts` = todas las sin leer de la parcela. `weather` es el clima real (o `null` si no se pudo obtener) y `water` sigue siendo de ejemplo hasta el endpoint de agua |
 | WS `/api/ws/dashboard?parcel_id=&token=` | lector | El mismo resumen en vivo: se envía al conectar y cada vez que cambia algo (mira la BD cada 2 s). Ver «WebSocket» |
+| WS `/api/ws/parcels/{id}?token=` | lector | **Eventos en directo** de la parcela: `reading` por cada lectura guardada y `alert` por cada alerta que se abre, en milisegundos. Ver «WebSocket por parcela» |
 | GET `/api/alerts` | lector | Alertas, las más recientes primero. Filtros: `parcel_id`, `unread_only`, `type` (`LOW`/`HIGH`/`OFFLINE`, otro valor da 422), `sensor_id`, `active` (true activas, false resueltas), `since` (solo las abiertas desde esa fecha ISO 8601; sin zona = UTC), `limit` (1–200, por defecto 20) y `offset`. Cabecera `X-Total-Count` con el total sin paginar |
 | PATCH `/api/alerts/{id}` | tecnico | Marcar vista (`{"acknowledged": true}`); no la resuelve, eso lo decide el motor |
 | POST `/api/alerts/ack-all?parcel_id=` | tecnico | Marca como leídas todas las de la parcela. Devuelve `{"updated": n}` (repetir da 0); 404 si la parcela no existe |
@@ -116,3 +117,27 @@ sensor de tipo `nivel_deposito`, rol `lector`, y modelos nuevos de terreno, agua
   (el resto del dashboard funciona). Nunca se inventa un clima: la interfaz debe mostrar
   «clima no disponible» y, si `stale` es true, que no está actualizado.
 - Cambiar de servidor (p. ej. para pruebas): variable `DEMETER_WEATHER_URL`.
+
+## WebSocket por parcela (eventos)
+
+`ws://<servidor>/api/ws/parcels/1?token=<JWT del login>`
+
+Es el canal de **eventos sueltos** (el de `/ws/dashboard` manda el resumen completo cuando algo cambia).
+
+| Mensaje | Cuándo | Forma |
+|---|---|---|
+| `ready` | Al conectar | `{"type": "ready", "parcel_id": 1}` |
+| `reading` | Cada lectura **nueva** guardada por `POST /sensors/{id}/data` | `{"type": "reading", "parcel_id": 1, "data": <Reading>}` |
+| `alert` | Cada alerta que esa lectura **abre** | `{"type": "alert", "parcel_id": 1, "data": <Alert>}` |
+| `pong` | Si el cliente manda el texto `ping` | `{"type": "pong"}` |
+
+- Llegan en cuanto la ingesta guarda (la ingesta avisa por dentro, sin sondeo): del orden de
+  milisegundos. Una lectura que abre una alerta manda primero `reading` y luego `alert`.
+- **No** se avisa de duplicados ni de lecturas rechazadas, ni de la carga de histórico (`/data/batch`),
+  ni de sensores dados de baja (se guardan, pero no se retransmiten).
+- Las alertas que se **cierran** no generan evento: para eso, el dashboard o `GET /alerts?active=false`.
+- Se cierra con el código **1008** si el token falta o no vale, si la parcela no existe o no se puede
+  ver (una de baja solo la ve un admin), y más tarde si el token caduca, el usuario es dado de baja o
+  la parcela se desactiva.
+- Si la conexión se cae no se recupera lo perdido: al reconectar, pedir `GET /dashboard` o `GET /data?since=`.
+- Todo va en memoria y en un solo proceso; con varios servidores haría falta un bus de mensajes.

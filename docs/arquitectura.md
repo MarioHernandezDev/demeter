@@ -86,7 +86,11 @@ Si la BD no está preparada, las rutas que la usan responden **503** con lo que 
    baja no generan alertas. La lectura y sus alertas se guardan juntas o no se guarda nada.
 4. Cada 60 s la vigilancia abre una alerta `OFFLINE` en los sensores activos que llevan 10 min o
    más sin datos. Un sensor que nunca ha enviado nada se muestra como «sin datos», no `OFFLINE`.
-5. El panel pide `GET /api/dashboard` o, mejor, abre el WebSocket y recibe el resumen cada vez
+5. Antes de guardar, la ingesta comprueba que el valor está dentro del **rango físico** del tipo de
+   sensor (`demeter/api/ranges.py`): una lectura imposible da 422 y no entra en la BD.
+6. Tras el `commit`, la ingesta avisa a los clientes conectados a `/ws/parcels/{id}` con un evento
+   `reading` y un `alert` por cada alerta abierta (`demeter/services/eventos.py`, en memoria).
+7. El panel pide `GET /api/dashboard` o, mejor, abre `/ws/dashboard` y recibe el resumen cada vez
    que cambia algo.
 
 El **histórico** (`POST /api/sensors/{id}/data/batch`, hasta 1000 lecturas, todo o nada) usa la
@@ -120,9 +124,12 @@ misma ruta de guardado pero **nunca genera alertas**: es historia, no lo que pas
 - **El repositorio devuelve esquemas de la API** y abre una sesión por llamada, salvo si quien llama
   le pasa la suya para hacer varias cosas en una transacción (lectura + alertas).
 - **Telegram solo al abrir una alerta**, no al cerrarla. El histórico no avisa.
-- **Un solo sondeo del WebSocket:** el servidor mira la BD cada 2 s y solo envía si cambió algo.
-  Es suficiente con un proceso y SQLite; si algún día hace falta que sea instantáneo, habría que
-  avisar desde la ingesta.
+- **Dos WebSockets, dos usos.** `/ws/parcels/{id}` manda **eventos sueltos** (`reading`, `alert`) y
+  la ingesta avisa por dentro en cuanto guarda, sin sondeo (milisegundos). `/ws/dashboard` manda el
+  **resumen completo** y mira la BD cada 2 s, enviando solo si cambió algo. Los avisos van en memoria
+  y en un solo proceso; con varios servidores haría falta un bus de mensajes.
+- **Una lectura imposible se rechaza, no se guarda.** Cada tipo de sensor tiene un rango físico; fuera
+  de él es un error de la placa y abriría alertas falsas y estropearía las medias.
 
 ## 7. Qué está hecho de verdad y qué es de ejemplo
 
@@ -131,7 +138,7 @@ misma ruta de guardado pero **nunca genera alertas**: es historia, no lo que pas
 | Parcelas, sensores, umbrales, baja en cascada | **BD** |
 | Lecturas: ingesta, histórico, consulta | **BD** |
 | Alertas (motor, listado, leer, «leer todas») y dashboard | **BD** |
-| WebSocket del dashboard | **BD** |
+| WebSocket del dashboard y eventos por parcela | **BD** |
 | Clima y previsión | **Real** (Open-Meteo, con caché y reserva) |
 | Login y usuarios (alta, roles, baja) | **BD** (`DbUserStore`); entrada por usuario o por correo |
 | Predicción a 24 h y consejo de riego | **BD** + clima real (cálculo de Mario H. sobre lecturas, zonas, depósitos y previsión guardados) |

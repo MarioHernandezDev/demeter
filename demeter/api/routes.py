@@ -23,10 +23,12 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, 
 from demeter.api import schemas as s
 from demeter.api.auth import ADMIN, ANY, EDITOR, UserStore, authenticate, get_user_store
 from demeter.api.geo import polygon_area_m2
+from demeter.api.ranges import out_of_range
 from demeter.api.security import create_access_token, decode_access_token, hash_password
 from demeter.db import conexion
 from demeter.db import repositorio as repo
 from demeter.services.alert_rules import card_status
+from demeter.services import eventos
 from demeter.services import history as history_service
 from demeter.services import weather as weather_service
 from demeter.services.forecast import predict_sensor
@@ -238,18 +240,29 @@ def _readable_sensor(sensor_id: str, user: s.User) -> s.Sensor:
 def sensor_data(
     sensor_id: str,
     limit: int = Query(default=100, ge=1, le=1000),
-    since: Optional[str] = Query(default=None, description="ISO 8601; solo lecturas posteriores"),
+    from_: Optional[datetime] = Query(default=None, alias="from", description="Desde esta fecha ISO 8601, incluida"),
+    to: Optional[datetime] = Query(default=None, description="Hasta esta fecha ISO 8601, incluida"),
+    since: Optional[str] = Query(default=None, description="ISO 8601; solo lecturas posteriores (excluida)"),
     user: s.User = ANY,
 ):
-    """Las últimas ``limit`` lecturas, de la más antigua a la más reciente."""
-    _readable_sensor(sensor_id, user)
+    """Lecturas de un sensor, de la más antigua a la más reciente.
+
+    Se filtran por ``from`` y ``to`` (ambas incluidas) y/o por ``since`` (excluida). Si hay más de
+    ``limit``, salen las ``limit`` más recientes de esa ventana. Una fecha sin zona se toma como UTC.
+    Para gráficas de muchos días, ``/history`` devuelve los datos ya agrupados.
+    """
+    sensor = _readable_sensor(sensor_id, user)
     t0 = None
     if since:
         try:
             t0 = datetime.fromisoformat(since.replace("Z", "+00:00"))
         except ValueError:
             raise HTTPException(422, "«since» debe ser una fecha ISO 8601")
-    return repo.readings(sensor_id, since=t0, limit=limit)
+    if from_ is not None and to is not None and _utc(from_) > _utc(to):
+        raise HTTPException(422, "«from» no puede ser posterior a «to»")
+    rows = history_service.readings_between(sensor_id, start=from_, end=to, since=t0, limit=limit)
+    return [s.Reading(sensor_id=sensor_id, timestamp=when, value=value, type=sensor.type, unit=sensor.unit)
+            for when, value in rows]
 
 
 @router.get("/sensors/{sensor_id}/history", response_model=s.SensorHistory, tags=["sensores"])
@@ -292,15 +305,35 @@ def _utc(value: datetime) -> datetime:
     return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
 
 
+def _alert_event(row) -> dict:
+    """El evento ``alert`` de una alerta recién abierta (se construye antes del ``commit``)."""
+    alert = s.Alert(
+        id=row.id, sensor_id=row.sensor_id, timestamp=row.opened_at, type=row.type, message=row.message,
+        acknowledged=row.acknowledged, resolved_at=row.resolved_at, value=row.value, threshold=row.threshold,
+    )
+    return {"type": "alert", "data": alert.model_dump(mode="json")}
+
+
+def _known_sensor(sensor_id: str) -> s.Sensor:
+    sensor = repo.get_sensor(sensor_id)
+    if sensor is None:
+        raise HTTPException(404, "Sensor no encontrado")
+    return sensor
+
+
 @router.post("/sensors/{sensor_id}/data", response_model=s.IngestResult, tags=["ingesta"])
 def ingest(sensor_id: str, body: s.ReadingIn, x_api_key: Optional[str] = Header(default=None)):
     """Entrada de lecturas en vivo (cabecera ``X-API-Key``).
 
     - Sin ``timestamp`` se usa la hora de llegada. Con él, debe estar entre 24 h atrás y 5 min
       por delante de la hora del servidor (si no, 422).
+    - El valor debe estar dentro del rango físico del tipo de sensor (temperatura de -50 a 100 ºC,
+      porcentajes de 0 a 100, luminosidad de 0 a 200 klx); si no, 422 y no se guarda nada.
     - Una lectura repetida (mismo sensor y hora) se ignora: ``stored=false, duplicate=true``.
     - La lectura y sus alertas se guardan en una sola transacción. Solo una lectura nueva y no
       atrasada puede abrir o cerrar alertas (lo decide el motor de alertas).
+    - Una vez guardada, se avisa por WebSocket (``/ws/parcels/{id}``) con un evento ``reading`` y un
+      evento ``alert`` por cada alerta que se haya abierto.
     """
     _check_ingest_key(x_api_key)
     now = datetime.now(timezone.utc)
@@ -309,14 +342,26 @@ def ingest(sensor_id: str, body: s.ReadingIn, x_api_key: Optional[str] = Header(
         raise HTTPException(
             422, "La hora de la lectura debe estar entre 24 h antes y 5 min después de la del servidor"
         )
+    sensor = _known_sensor(sensor_id)
+    problem = out_of_range(sensor.type, body.value)
+    if problem:
+        raise HTTPException(422, problem)
+    events = []
     with conexion.open_session() as session:
         try:
             result = repo.save_reading(sensor_id, when, body.value, session=session)
         except repo.NotFoundError:
             raise HTTPException(404, "Sensor no encontrado")
         if result.stored:
-            evaluar_lectura(session, sensor_id, when, body.value)
+            opened = evaluar_lectura(session, sensor_id, when, body.value)
+            if sensor.is_active:  # un sensor dado de baja guarda, pero no se retransmite
+                reading = s.Reading(sensor_id=sensor_id, timestamp=when, value=body.value,
+                                    type=sensor.type, unit=sensor.unit)
+                events = [{"type": "reading", "data": reading.model_dump(mode="json")}]
+                events += [_alert_event(row) for row in opened]
         session.commit()
+    for event in events:  # después del commit: quien escucha ya puede leer la lectura de la BD
+        eventos.publish(sensor.parcel_id, {**event, "parcel_id": sensor.parcel_id})
     return result
 
 
@@ -326,15 +371,22 @@ def ingest_history(
 ):
     """Carga de histórico (hasta 1000 lecturas por llamada), con ``X-API-Key``.
 
-    Guarda todo o nada. **No genera alertas**: es historia, no lo que pasa ahora. Las repetidas
-    se cuentan en ``duplicates`` y no son un error. Las horas deben ser de 2000 en adelante y
-    no pasarse de 5 min del futuro.
+    Guarda todo o nada. **No genera alertas ni avisos por WebSocket**: es historia, no lo que pasa
+    ahora. Las repetidas se cuentan en ``duplicates`` y no son un error. Las horas deben ser de 2000
+    en adelante y no pasarse de 5 min del futuro, y los valores, estar dentro del rango físico del
+    sensor: una sola lectura imposible rechaza todo el lote (422).
     """
     _check_ingest_key(x_api_key)
     limit = datetime.now(timezone.utc) + MAX_FUTURE
     points = [(_utc(p.timestamp), p.value) for p in body.readings]
     if any(t < OLDEST_HISTORY or t > limit for t, _ in points):
         raise HTTPException(422, "Hay lecturas con una hora anterior al año 2000 o en el futuro")
+    sensor = _known_sensor(sensor_id)
+    bad = [(when, p) for (when, value) in points if (p := out_of_range(sensor.type, value))]
+    if bad:
+        raise HTTPException(
+            422, f"{len(bad)} de {len(points)} lecturas imposibles; la primera: {bad[0][1]}. No se guardó nada"
+        )
     stored = 0
     with conexion.open_session() as session:
         try:
@@ -460,6 +512,77 @@ async def dashboard_ws(
                 pass
     except WebSocketDisconnect:
         return
+
+
+@router.websocket("/ws/parcels/{parcel_id}")
+async def parcel_events_ws(
+    websocket: WebSocket,
+    parcel_id: int,
+    token: str = Query(default=""),
+    store: UserStore = Depends(get_user_store),
+):
+    """Eventos de una parcela en directo: cada lectura nueva y cada alerta que se abre.
+
+    - El token JWT del login va en la URL (un navegador no puede poner cabeceras en un WebSocket):
+      ``/api/ws/parcels/1?token=...``.
+    - Al conectar llega ``{"type": "ready", "parcel_id": 1}``; a partir de ahí, por cada lectura
+      guardada por la ingesta, ``{"type": "reading", "parcel_id": 1, "data": <Reading>}`` y, por cada
+      alerta que esa lectura abre, ``{"type": "alert", "parcel_id": 1, "data": <Alert>}``. Llegan
+      en cuanto la ingesta guarda (milisegundos), no por sondeo.
+    - No se retransmiten el histórico (``/data/batch``) ni los sensores dados de baja.
+    - Si el cliente manda ``ping`` responde ``{"type": "pong"}``.
+    - Se cierra con el código 1008 si el token falta o no vale, si la parcela no existe o no se puede
+      ver, o si más tarde el token caduca, el usuario es dado de baja o la parcela se desactiva.
+    - Para el resumen completo del dashboard, ver ``/ws/dashboard``.
+    """
+    def current() -> Optional[s.User]:
+        user_id = decode_access_token(token)
+        stored = store.get_by_id(user_id) if user_id is not None else None
+        return stored.user if stored and stored.user.is_active else None
+
+    def can_see(user: s.User) -> bool:
+        try:
+            _visible_parcel(parcel_id, user)
+            return True
+        except HTTPException:
+            return False
+
+    user = current()
+    if user is None:
+        raise WebSocketException(code=1008, reason="Token no válido")
+    if not await asyncio.to_thread(can_see, user):
+        raise WebSocketException(code=1008, reason="Parcela no encontrada")
+
+    await websocket.accept()
+    sub = eventos.subscribe(parcel_id)
+    pending_event = asyncio.ensure_future(sub.queue.get())
+    pending_message = asyncio.ensure_future(websocket.receive_text())
+    try:
+        await websocket.send_json({"type": "ready", "parcel_id": parcel_id})
+        while True:
+            done, _ = await asyncio.wait(
+                {pending_event, pending_message}, timeout=WS_POLL_SECONDS,
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            if not done:  # nada nuevo: se aprovecha para ver si sigue valiendo el permiso
+                user = current()
+                if user is None or not await asyncio.to_thread(can_see, user):
+                    await websocket.close(code=1008, reason="Sesión caducada o parcela no disponible")
+                    return
+                continue
+            if pending_event in done:
+                await websocket.send_json(pending_event.result())
+                pending_event = asyncio.ensure_future(sub.queue.get())
+            if pending_message in done:
+                if pending_message.result().strip() == "ping":  # si se desconecta, lanza WebSocketDisconnect
+                    await websocket.send_json({"type": "pong"})
+                pending_message = asyncio.ensure_future(websocket.receive_text())
+    except WebSocketDisconnect:
+        return
+    finally:
+        pending_event.cancel()
+        pending_message.cancel()
+        eventos.unsubscribe(sub)
 
 
 @router.get("/alerts", response_model=list[s.Alert], tags=["alertas"])
