@@ -2,12 +2,13 @@
 
 Código: `demeter/api/` · Pruebas: `tests/test_api_contract.py` · Rama: `feature/api-contrato`
 
-**Parcelas y sensores ya leen y escriben en la base de datos** (A4, #22; repositorio de David,
-#13). El resto de respuestas siguen siendo datos de ejemplo (finca ficticia en Carchuna, Motril) y
-no guardan nada: se irán sustituyendo por su consulta tarea a tarea. Los esquemas (`schemas.py`)
-no cambian.
+**Todas las rutas leen y escriben en la base de datos** (repositorio de David, #13): usuarios,
+parcelas, sensores, lecturas, alertas, dashboard, terreno, costes, agua, predicción y riego. El
+clima es real (Open-Meteo). Los esquemas (`schemas.py`) no cambian. Lo único que ya no existe es el
+«dato de ejemplo»: sin lecturas, un sensor está en `sin_datos`, un depósito sin nivel (`null`) y la
+predicción da 404; nada se inventa.
 
-Para que las rutas de parcelas y sensores funcionen, la BD tiene que estar preparada:
+Para que la API funcione, la BD tiene que estar preparada:
 
 ```
 reflex db migrate               # crea las tablas
@@ -27,8 +28,10 @@ En `/docs`: `POST /api/auth/login` con `admin` / `demo1234` → copia el `access
 Usuarios de ejemplo: `admin`, `tecnico`, `lector` (misma contraseña). El login es real: contraseñas
 con bcrypt y token JWT firmado que caduca a los 60 min (`DEMETER_JWT_MINUTES`; el secreto va en
 `DEMETER_JWT_SECRET`). El token solo lleva el id: el rol y si el usuario sigue activo se leen en
-cada petición, así que una baja o un cambio de rol valen al instante. Hasta que la BD tenga
-usuarios (seed, #14) los usuarios son los de ejemplo, en `demeter/api/auth.py` (`UserStore`). Ingesta: cabecera
+cada petición, así que una baja o un cambio de rol valen al instante. Los usuarios están en la
+tabla `users` (`DbUserStore` en `demeter/api/auth.py`). Se puede entrar con el **nombre de usuario
+o con el correo** (un texto con `@` se toma como correo; el correo no distingue mayúsculas). Un
+usuario que solo entra con Google no tiene contraseña: con contraseña siempre da 401. Ingesta: cabecera
 `X-API-Key: demo-ingest-key` (variable de entorno `DEMETER_INGEST_KEY` para cambiarla).
 
 ## Convenciones
@@ -46,25 +49,30 @@ usuarios (seed, #14) los usuarios son los de ejemplo, en `demeter/api/auth.py` (
 |---|---|---|
 | GET `/api/health` | — | Estado |
 | POST `/api/auth/login` · GET `/api/auth/me` | — · cualquiera | Sesión |
-| GET/POST `/api/users` · PATCH `/api/users/{id}` | admin | Gestión de usuarios |
+| GET `/api/users` | admin | Todos los usuarios, también los de baja (con `email` y `email_verified`, nunca la contraseña) |
+| POST `/api/users` | admin | Crea un usuario: `username` (sin `@`), `email`, `password` (8–72), `role`. La contraseña se guarda con bcrypt. Nombre o correo repetidos (sin mirar mayúsculas): 409 |
+| PATCH `/api/users/{id}` | admin | Cambia `role` o `is_active` (baja o reactivación; no se borra). Un admin no puede quitarse a sí mismo el rol ni darse de baja (409). `null` da 422 |
 | GET `/api/parcels` · `/api/parcels/{id}` | lector | Parcelas (`?include_inactive=true` solo admin) |
 | PATCH `/api/parcels/{id}` | admin | Dar de baja o reactivar (`{"is_active": false}`), con todos sus sensores |
 | PUT `/api/parcels/{id}/boundary` | tecnico | Contorno dibujado (calcula m²) |
 | GET `/api/parcels/{id}/sensors` | lector | Sensores (los de baja solo los ve admin o tecnico) |
 | PATCH `/api/sensors/{id}` | tecnico (umbrales: admin) | Umbrales / colocar en el mapa / activar. Solo cambia lo enviado; `null` vacía el campo; el mínimo debe ser menor que el máximo |
 | GET `/api/sensors/{id}/data?limit&since` | lector | Lecturas de la BD, de antigua a reciente (un lector no ve las de un sensor de baja) |
+| GET `/api/sensors/{id}/history?range=24h\|7d\|30d` | lector | Histórico **agregado** para las gráficas: por tramo (10 min, 1 h o 6 h, alineados al reloj) mínimo, media, máximo y nº de lecturas, de antiguo a reciente, **sin los tramos vacíos** (un hueco es un hueco en los datos). Trae `summary` del rango (`min`, `avg`, `max`, `count`; `null` sin datos) y los umbrales, para enseñar «cómo fue la semana» junto a los límites. Sobre 600 000 lecturas tarda unos 45 ms |
 | POST `/api/sensors/{id}/data` | `X-API-Key` | Ingesta en vivo. `timestamp` opcional (si falta, hora de llegada; si viene, entre 24 h atrás y 5 min por delante, o 422). Repetida: `stored=false, duplicate=true`. Guarda la lectura y evalúa las alertas en una sola transacción; una lectura atrasada o de un sensor de baja se guarda pero no alerta |
 | POST `/api/sensors/{id}/data/batch` | `X-API-Key` | Carga de histórico: `{"readings": [{timestamp, value}, …]}`, 1 a 1000 por llamada, todo o nada, horas de 2000 en adelante. **No genera alertas**. Devuelve `received`, `stored`, `duplicates` |
 | GET `/api/dashboard?parcel_id=` | lector | Desde la BD: por sensor, último valor, `status` (`ok`/`LOW`/`HIGH`/`offline`/`sin_datos`) y `recent` (últimos 20 valores); las 5 alertas más recientes (activas primero); `unread_alerts` = todas las sin leer de la parcela. `weather` es el clima real (o `null` si no se pudo obtener) y `water` sigue siendo de ejemplo hasta el endpoint de agua |
 | WS `/api/ws/dashboard?parcel_id=&token=` | lector | El mismo resumen en vivo: se envía al conectar y cada vez que cambia algo (mira la BD cada 2 s). Ver «WebSocket» |
-| GET `/api/alerts` | lector | Alertas, las más recientes primero. Filtros: `parcel_id`, `unread_only`, `type` (`LOW`/`HIGH`/`OFFLINE`, otro valor da 422), `sensor_id`, `active` (true activas, false resueltas), `limit` (1–200, por defecto 20) y `offset`. Cabecera `X-Total-Count` con el total sin paginar |
+| GET `/api/alerts` | lector | Alertas, las más recientes primero. Filtros: `parcel_id`, `unread_only`, `type` (`LOW`/`HIGH`/`OFFLINE`, otro valor da 422), `sensor_id`, `active` (true activas, false resueltas), `since` (solo las abiertas desde esa fecha ISO 8601; sin zona = UTC), `limit` (1–200, por defecto 20) y `offset`. Cabecera `X-Total-Count` con el total sin paginar |
 | PATCH `/api/alerts/{id}` | tecnico | Marcar vista (`{"acknowledged": true}`); no la resuelve, eso lo decide el motor |
 | POST `/api/alerts/ack-all?parcel_id=` | tecnico | Marca como leídas todas las de la parcela. Devuelve `{"updated": n}` (repetir da 0); 404 si la parcela no existe |
 | GET `/api/parcels/{id}/weather` | lector | Clima **real** de Open-Meteo: `current` y `forecast` de las próximas 24 h. Cuenta con la finca 3 y respeta las parcelas de baja. 503 si no hay internet ni datos guardados |
-| GET `/api/parcels/{id}/water` | lector | Agua disponible (de ejemplo hasta el endpoint de agua; solo fincas 1 y 2) |
-| GET `/api/parcels/{id}/terrain` | lector | Todo para el editor 3D |
-| POST `/api/parcels/{id}/zones` · `/elements` · DELETE `/api/elements/{id}` | tecnico | Editar terreno |
-| GET/POST `/api/parcels/{id}/transactions` · GET `.../balance` | lector · tecnico | Costes e ingresos |
+| GET `/api/parcels/{id}/water` | lector | Depósitos y agua disponible. El nivel es el último valor del sensor de cada depósito (`null` si aún no hay lecturas; no es lo mismo que vacío). `distribution` es una propuesta proporcional a los m² de cultivo; el reparto de verdad es `/irrigation` |
+| GET `/api/parcels/{id}/terrain` | lector | Todo para el editor 3D: parcela con contorno, zonas, elementos, sensores (un lector no ve los de baja) y depósitos |
+| POST `/api/parcels/{id}/zones` · `/elements` · DELETE `/api/elements/{id}` | tecnico | Editar terreno. La zona calcula sus m². En una parcela de baja, 409. Borrar un elemento es definitivo (lo único que se borra de verdad) |
+| GET/POST `/api/parcels/{id}/transactions` · GET `.../balance` | lector · tecnico | Costes e ingresos. El importe va siempre en positivo y el signo lo da `kind`. Lista: los más recientes primero. `balance`: ingresos, gastos, saldo y saldo por categoría. En una parcela de baja, 409 al apuntar |
+| GET `/api/sensors/{id}/prediction` | lector | Predicción a 24 h con las últimas 72 h de lecturas. Sin datos suficientes, 404 |
+| GET `/api/parcels/{id}/irrigation` | lector | Consejo de riego con zonas, humedad del suelo, depósitos y clima reales. Sin previsión del tiempo (sin internet), el consejo es `wait`: no se riega a ciegas. El sensor de humedad debe estar colocado dentro de la zona para contar para ella |
 
 ## Qué es nuevo respecto a `demeter/state/types.py`
 

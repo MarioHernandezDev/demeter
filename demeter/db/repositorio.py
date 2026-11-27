@@ -417,6 +417,7 @@ def list_alerts(
     active: bool | None = None,
     limit: int = 20,
     offset: int = 0,
+    opened_since: datetime | None = None,
 ) -> tuple[list[s.Alert], int]:
     """Alertas, las más recientes primero, por páginas. Devuelve ``(página, total)``.
 
@@ -427,6 +428,8 @@ def list_alerts(
     - ``sensor_id``: solo las de ese sensor.
     - ``active``: ``True`` solo activas (sin ``resolved_at``), ``False`` solo resueltas,
       ``None`` todas.
+
+    - ``opened_since``: solo las abiertas en esa fecha o después (p. ej. «últimos 7 días»).
 
     ``total`` es cuántas cumplen los filtros SIN contar la paginación: es lo que la API manda en
     la cabecera ``X-Total-Count`` para que la interfaz sepa cuántas páginas hay.
@@ -449,6 +452,8 @@ def list_alerts(
         conditions.append(Alert.type == alert_type)
     if sensor_id is not None:
         conditions.append(Alert.sensor_id == sensor_id)
+    if opened_since is not None:
+        conditions.append(Alert.opened_at >= _as_utc(opened_since))
     if active is True:
         conditions.append(Alert.resolved_at.is_(None))
     elif active is False:

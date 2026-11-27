@@ -35,7 +35,13 @@ def _token() -> dict:
     return {"Authorization": f"Bearer {r.json()['access_token']}"}
 
 
-HEADERS = _token()
+HEADERS: dict = {}  # se rellena en cada prueba, cuando ya hay base de datos con usuarios
+
+
+@pytest.fixture
+def _sesion(datos_ejemplo):
+    HEADERS.clear()
+    HEADERS.update(_token())
 
 
 # ------------------------------------------------------------------ comprobaciones del contrato
@@ -94,6 +100,7 @@ def assert_advice_ok(a: s.IrrigationAdvice, zones: list[s.Zone], now: datetime):
 # ------------------------------------------------------------------ por la API con los datos de ejemplo
 
 
+@pytest.mark.usefixtures("_sesion")
 @pytest.mark.parametrize("sensor", d.SENSORS, ids=lambda x: x.id)
 def test_api_prediccion_de_cada_sensor(sensor):
     r = client.get(f"/api/sensors/{sensor.id}/prediction", headers=HEADERS)
@@ -103,6 +110,7 @@ def test_api_prediccion_de_cada_sensor(sensor):
     assert_prediction_ok(p, sensor, d.last_reading(sensor).value)
 
 
+@pytest.mark.usefixtures("_sesion")
 @pytest.mark.parametrize("parcel_id", sorted(d.PARCELS))
 def test_api_riego_de_cada_parcela(parcel_id):
     r = client.get(f"/api/parcels/{parcel_id}/irrigation", headers=HEADERS)
@@ -112,6 +120,7 @@ def test_api_riego_de_cada_parcela(parcel_id):
     assert_advice_ok(a, [z for z in d.ZONES if z.parcel_id == parcel_id], a.generated_at)
 
 
+@pytest.mark.usefixtures("_sesion")
 def test_api_riego_y_deposito_cuentan_la_misma_agua():
     a = client.get("/api/parcels/1/irrigation", headers=HEADERS).json()
     w = client.get("/api/parcels/1/water", headers=HEADERS).json()

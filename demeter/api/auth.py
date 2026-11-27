@@ -1,9 +1,8 @@
 """Quién es el usuario de cada petición (A3, issue #21).
 
 ``UserStore`` es la única puerta de la API a los usuarios guardados. Hoy hay una versión en
-memoria con los tres usuarios de ejemplo; cuando la capa de consultas a la BD (B6, #13) esté
-en ``main`` basta con escribir otra clase con los mismos dos métodos y devolverla desde
-``get_user_store``. Nada más de este fichero cambia. Los tests hacen lo mismo con
+memoria con los tres usuarios de ejemplo (solo para pruebas) y otra, ``DbUserStore``, que lee de
+la tabla ``users``: es la que usa la API. Los tests pueden cambiarla con
 ``api.dependency_overrides[get_user_store]``.
 """
 
@@ -14,6 +13,7 @@ from fastapi import Depends, Header, HTTPException
 
 from demeter.api import sample_data as d
 from demeter.api import schemas as s
+from demeter.db import repositorio as repo
 from demeter.api.security import (
     DUMMY_HASH,
     decode_access_token,
@@ -51,11 +51,36 @@ class DemoUserStore:
         return next((u for u in self._users if u.user.id == user_id), None)
 
 
-_demo_store = DemoUserStore()
+class DbUserStore:
+    """Usuarios guardados en la base de datos (tabla ``users``, repositorio de B6)."""
+
+    @staticmethod
+    def _stored(row) -> Optional[StoredUser]:
+        if row is None:
+            return None
+        user = s.User(
+            id=row.id, username=row.username, role=row.role, is_active=row.is_active,
+            email=row.email, email_verified=row.email_verified,
+        )
+        # Un usuario que solo entra con Google no tiene contraseña. ``DUMMY_HASH`` es de una
+        # contraseña inventada y aleatoria, así que nunca coincide: para el login es una
+        # contraseña incorrecta y tarda lo mismo que cualquier otra.
+        return StoredUser(user=user, password_hash=row.password_hash or DUMMY_HASH)
+
+    def get_by_username(self, username: str) -> Optional[StoredUser]:
+        # Un nombre de usuario nunca lleva «@», así que un texto con «@» es un correo.
+        row = repo.get_user_by_email(username) if "@" in username else repo.get_user_by_username(username)
+        return self._stored(row)
+
+    def get_by_id(self, user_id: int) -> Optional[StoredUser]:
+        return self._stored(repo.get_user(user_id))
+
+
+_db_store = DbUserStore()
 
 
 def get_user_store() -> UserStore:
-    return _demo_store
+    return _db_store
 
 
 # ---------------------------------------------------------------- login

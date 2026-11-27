@@ -133,13 +133,16 @@ misma ruta de guardado pero **nunca genera alertas**: es historia, no lo que pas
 | Alertas (motor, listado, leer, «leer todas») y dashboard | **BD** |
 | WebSocket del dashboard | **BD** |
 | Clima y previsión | **Real** (Open-Meteo, con caché y reserva) |
-| Login | JWT real, pero los **3 usuarios de ejemplo** en memoria (falta `DbUserStore`) |
-| Predicción a 24 h y consejo de riego | Cálculo real sobre **datos de ejemplo** |
-| Terreno, zonas, elementos, depósitos y agua, costes | **Ejemplo** (solo fincas 1 y 2) |
+| Login y usuarios (alta, roles, baja) | **BD** (`DbUserStore`); entrada por usuario o por correo |
+| Predicción a 24 h y consejo de riego | **BD** + clima real (cálculo de Mario H. sobre lecturas, zonas, depósitos y previsión guardados) |
+| Terreno, zonas, elementos, depósitos y agua, costes | **BD** |
 
-Consecuencia visible: `/api/parcels/3/terrain`, `/water`, `/irrigation` y `/transactions` dan 404
-para la finca 3 aunque el dashboard y el clima ya la sirven. Se resuelve con los modelos y datos
-del terreno 3D (David) y los endpoints de terreno y agua (Alex).
+**Ya no queda ninguna ruta con datos de ejemplo.** `demeter/api/sample_data.py` solo lo usan los
+usuarios de ejemplo de las pruebas (`DemoUserStore`) y las pruebas de predicción y riego, que lo usan
+para generar series de lecturas (fixture `datos_ejemplo` de `tests/conftest.py`).
+
+Consecuencia: sin lecturas la finca está «en blanco» y la API lo dice (`sin_datos`, nivel `null`,
+predicción 404, consejo `wait`). Lo que llena la base de datos es el simulador (David) o las placas.
 
 ## 8. Variables de entorno
 
@@ -156,7 +159,8 @@ del terreno 3D (David) y los endpoints de terreno y agua (Alex).
 ## 9. Pruebas
 
 `pytest` ejecuta todo con una BD en memoria y el seed (`tests/conftest.py`) y sin tocar internet
-(el clima falla salvo que la prueba lo simule). La cobertura de `demeter/api` es del 96 %.
+(el clima falla salvo que la prueba lo simule). Las pruebas que necesitan una finca «con vida» usan
+la fixture `datos_ejemplo`. La cobertura de `demeter/api` es superior al 95 %.
 
 ## 10. Límites conocidos y siguientes pasos
 
@@ -164,5 +168,6 @@ del terreno 3D (David) y los endpoints de terreno y agua (Alex).
   procesos en el WebSocket.
 - **Claves de ingesta:** hoy hay una global. El plan es una clave por dispositivo (placa) y un
   endpoint por lotes por dispositivo; la placa pertenecería a una parcela.
-- **Usuarios en BD** y registro con correo o Google, cuando David publique las consultas de usuarios.
+- **Registro con correo (con verificación) y login con Google:** el repositorio ya lo soporta
+  (`get_user_by_email`, `get_user_by_google_sub`); falta la API.
 - **Compartir parcelas** entre usuarios (visores o miembros): pendiente de decidir con el equipo.

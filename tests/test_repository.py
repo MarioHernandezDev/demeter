@@ -770,6 +770,28 @@ def test_list_alerts_filtra_activas_y_resueltas(db, alerts):
     assert n_resueltas == 1 and resueltas[0].resolved_at is not None
 
 
+def test_list_alerts_opened_since_incluye_la_fecha_justa_y_deja_fuera_las_anteriores(db, alerts):
+    # abiertas en los minutos 1, 2, 3, 4 y 6: desde el 3 quedan 3, 4 y 6
+    page, total = repositorio.list_alerts(opened_since=at(3))
+    assert total == 3 and [a.timestamp for a in page] == [at(6), at(4), at(3)]
+    assert repositorio.list_alerts(opened_since=at(1))[1] == 5  # justo la más antigua: entra
+    assert repositorio.list_alerts(opened_since=at(7)) == ([], 0)
+
+
+def test_list_alerts_opened_since_acepta_fecha_sin_zona_y_con_otra_zona(db, alerts):
+    sin_zona = at(3).replace(tzinfo=None)  # sin zona = UTC
+    assert repositorio.list_alerts(opened_since=sin_zona)[1] == 3
+    otra_zona = at(3).astimezone(timezone(timedelta(hours=5)))  # mismo instante, otra zona
+    assert repositorio.list_alerts(opened_since=otra_zona)[1] == 3
+
+
+def test_list_alerts_opened_since_se_combina_y_el_total_no_cuenta_la_paginacion(db, alerts):
+    page, total = repositorio.list_alerts(opened_since=at(2), limit=1)
+    assert len(page) == 1 and total == 4  # minutos 2, 3, 4 y 6, de los que solo se devuelve 1
+    page, total = repositorio.list_alerts(opened_since=at(2), parcel_id=1, active=True)
+    assert total == 3 and {a.sensor_id for a in page} == {"h001", "t001", "a001"}
+
+
 def test_list_alerts_combina_filtros(db, alerts):
     page, total = repositorio.list_alerts(parcel_id=1, active=True, alert_type="LOW")
     assert total == 1 and page[0].sensor_id == "a001"
