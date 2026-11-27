@@ -53,8 +53,8 @@ usuario que solo entra con Google no tiene contraseña: con contraseña siempre 
 | POST `/api/users` | admin | Crea un usuario: `username` (sin `@`), `email`, `password` (8–72), `role`. La contraseña se guarda con bcrypt. Nombre o correo repetidos (sin mirar mayúsculas): 409 |
 | PATCH `/api/users/{id}` | admin | Cambia `role` o `is_active` (baja o reactivación; no se borra). Un admin no puede quitarse a sí mismo el rol ni darse de baja (409). `null` da 422 |
 | GET `/api/parcels` · `/api/parcels/{id}` | lector | Parcelas (`?include_inactive=true` solo admin) |
-| PATCH `/api/parcels/{id}` | admin | Dar de baja o reactivar (`{"is_active": false}`), con todos sus sensores |
-| PUT `/api/parcels/{id}/boundary` | tecnico | Contorno dibujado (calcula m²) |
+| PATCH `/api/parcels/{id}` | admin | Dar de baja o reactivar (`{"is_active": false}`), con todos sus sensores. **409** al reactivarla si otra parcela activa del mismo propietario ya usa su nombre |
+| PUT `/api/parcels/{id}/boundary` | tecnico | Contorno dibujado (calcula m²). 409 si está de baja; 422 si el contorno no es válido o el repositorio lo rechaza (contorno y superficie van juntos, rangos) |
 | GET `/api/parcels/{id}/sensors` | lector | Sensores (los de baja solo los ve admin o tecnico) |
 | PATCH `/api/sensors/{id}` | tecnico (umbrales: admin) | Umbrales / colocar en el mapa / activar. Solo cambia lo enviado; `null` vacía el campo; el mínimo debe ser menor que el máximo |
 | GET `/api/sensors/{id}/data?limit&since` | lector | Lecturas de la BD, de antigua a reciente (un lector no ve las de un sensor de baja) |

@@ -16,7 +16,7 @@ Reglas generales:
 from datetime import date, datetime
 from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 # --------------------------------------------------------------------------------------
 # Listas cerradas
@@ -117,6 +117,31 @@ class Parcel(BaseModel):
     longitude: Optional[float] = None
     area_m2: Optional[float] = None
     is_active: bool = True  # False = dada de baja (solo la ve un admin)
+
+
+class ParcelCreate(BaseModel):
+    """Cuerpo de ``POST /api/parcels`` (pantalla «Añadir parcela»: se dibuja el borde y listo).
+
+    Con ``boundary`` el centro (latitud y longitud) y los m² los calcula el servidor. Sin
+    contorno hay que dar el centro. El propietario es quien la crea. El nombre no puede repetirse
+    entre las parcelas activas del mismo propietario (409).
+    """
+
+    name: str = Field(min_length=1, max_length=100)
+    location: str = Field(min_length=1, max_length=100)  # municipio o paraje
+    crop: str = Field(min_length=1, max_length=60)
+    boundary: Optional[Polygon] = None
+    latitude: Optional[float] = Field(default=None, ge=-90, le=90)
+    longitude: Optional[float] = Field(default=None, ge=-180, le=180)
+
+    @model_validator(mode="after")
+    def _centre_or_boundary(self):
+        self.name, self.location, self.crop = (x.strip() for x in (self.name, self.location, self.crop))
+        if not (self.name and self.location and self.crop):
+            raise ValueError("name, location y crop no pueden estar vacíos")
+        if self.boundary is None and (self.latitude is None or self.longitude is None):
+            raise ValueError("hace falta el contorno (boundary) o el centro (latitude y longitude)")
+        return self
 
 
 class ParcelUpdate(BaseModel):

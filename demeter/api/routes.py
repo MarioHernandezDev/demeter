@@ -155,8 +155,14 @@ def get_parcel(parcel_id: int, user: s.User = ANY):
 
 @router.patch("/parcels/{parcel_id}", response_model=s.Parcel, tags=["parcelas"])
 def update_parcel(parcel_id: int, body: s.ParcelUpdate, _: s.User = ADMIN):
-    """Da de baja o reactiva una parcela y, con ella, todos sus sensores."""
-    parcel = repo.set_parcel_active(parcel_id, body.is_active)
+    """Da de baja o reactiva una parcela y, con ella, todos sus sensores.
+
+    Reactivarla da 409 si otra parcela activa del mismo propietario ya usa su nombre (una dada de
+    baja libera el nombre, y al volver tiene que seguir siendo único)."""
+    try:
+        parcel = repo.set_parcel_active(parcel_id, body.is_active)
+    except repo.AlreadyExistsError as e:
+        raise HTTPException(409, str(e))
     if parcel is None:
         raise HTTPException(404, "Parcela no encontrada")
     return parcel.model_copy(update={"is_active": body.is_active})
@@ -171,7 +177,10 @@ def set_boundary(parcel_id: int, body: s.BoundaryUpdate, user: s.User = EDITOR):
         area = polygon_area_m2(body.boundary)
     except ValueError as e:
         raise HTTPException(422, str(e))
-    updated = repo.set_boundary(parcel_id, body.boundary, area)
+    try:
+        updated = repo.set_boundary(parcel_id, body.boundary, area)
+    except ValueError as e:  # el repositorio también valida (contorno y superficie van juntos, rangos)
+        raise HTTPException(422, str(e))
     if updated is None:
         raise HTTPException(404, "Parcela no encontrada")
     return updated.model_copy(update={"is_active": True})
